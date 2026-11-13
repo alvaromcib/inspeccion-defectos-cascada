@@ -76,6 +76,9 @@ def run(weights, data, backend, out_dir, view_h=400, step=8, conf=0.1, rows=30):
                     ans = vlm.ask(crop, backend, Counter(tr["det"]).most_common(1)[0][0])
                     t_vlm += time.time() - t1
                     tr["queries"].append(ans); tr["last_q"] = fi; calls += 1
+                    if backend != "detector":
+                        print(f"[frame {fi}] VLM call {calls} · defect {tid} · {ans['label']} "
+                              f"({time.time() - t1:.0f} s)", flush=True)
                     top, n = Counter(q["label"] for q in tr["queries"]).most_common(1)[0]
                     if n >= AGREE:
                         tr["done"] = True

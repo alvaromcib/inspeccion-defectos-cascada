@@ -36,7 +36,7 @@ def ask_ollama(crop, model=None, host=None) -> dict:
     body = {"model": model, "stream": False, "format": "json", "options": {"temperature": 0},
             "messages": [{"role": "user", "content": PROMPT, "images": [_b64(crop)]}]}
     req = urllib.request.Request(f"{host}/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
-    out = json.loads(urllib.request.urlopen(req, timeout=120).read())["message"]["content"]
+    out = json.loads(urllib.request.urlopen(req, timeout=int(os.getenv("OLLAMA_TIMEOUT", "600"))).read())["message"]["content"]
     ans = json.loads(out)
     label = ans.get("label", "").strip().lower()
     return {"label": label if label in CLASSES + ["ok"] else "unknown",
