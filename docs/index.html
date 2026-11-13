@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inspección de defectos en cascada: detector + VLM · Álvaro Martín Coll</title>
+<style>:root {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --text-1: #f0efec;
+  --text-2: #c3c2b7;
+  --text-3: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --ring: rgba(255,255,255,0.10);
+  --s1: #3987e5;  /* blue */
+  --s2: #d95926;  /* orange */
+  --s3: #199e70;  /* aqua */
+  --good: #0ca30c;
+  --warn: #fab219;
+  --crit: #d03b3b;
+  --accent: var(--s1);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-1); line-height: 1.5; }
+a { color: var(--accent); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
+
+/* Hero */
+.hero { position: relative; overflow: hidden; padding: 56px 0 40px; border-bottom: 1px solid var(--grid); margin-bottom: 32px; }
+.hero::before { content: ""; position: absolute; inset: -40% -10% auto auto; width: 720px; height: 720px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  pointer-events: none; }
+.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
+.hero .wrap { position: relative; padding-bottom: 0; }
+.eyebrow { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.08; margin: 10px 0 14px; letter-spacing: -.02em; max-width: 900px; }
+.lede { font-size: 18px; color: var(--text-2); max-width: 760px; margin: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.tag { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--ring); color: var(--text-2); background: var(--surface); }
+
+/* KPI tiles */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 0 0 28px; }
+.kpi { background: var(--surface); border: 1px solid var(--ring); border-radius: 14px; padding: 18px 20px; }
+.kpi .l { font-size: 13px; color: var(--text-2); }
+.kpi .v { font-size: 34px; font-weight: 650; letter-spacing: -.02em; margin-top: 4px; }
+.kpi .d { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+.kpi.hero-kpi { background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), var(--surface)); }
+.kpi.hero-kpi .v { font-size: 52px; }
+
+/* Cards */
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 14px; padding: 20px; grid-column: span 12; min-width: 0; }
+.span-6 { grid-column: span 6; } .span-4 { grid-column: span 4; } .span-8 { grid-column: span 8; }
+@media (max-width: 860px) { .span-6, .span-4, .span-8 { grid-column: span 12; } }
+.card h2 { font-size: 17px; margin: 0 0 2px; }
+.card .sub { font-size: 13px; color: var(--text-3); margin: 0 0 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--text-2); margin: -4px 0 8px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.chip { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--ring);
+  background: var(--surface-2); color: var(--text-2); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Story / method */
+.steps { counter-reset: s; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.step { background: var(--surface-2); border-radius: 12px; padding: 16px; font-size: 14px; color: var(--text-2); }
+.step b { display: block; color: var(--text-1); margin-bottom: 4px; }
+.step::before { counter-increment: s; content: counter(s, decimal-leading-zero); font-size: 12px; color: var(--accent); font-weight: 700; }
+.note { font-size: 13px; color: var(--text-3); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); }
+th { color: var(--text-3); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; }
+.footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--grid); display: flex; flex-wrap: wrap;
+  gap: 12px 24px; justify-content: space-between; font-size: 14px; color: var(--text-2); }
+.cta { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; padding: 10px 18px;
+  border-radius: 10px; font-weight: 600; }
+
+/* Viz */
+.viz-tick { fill: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.viz-label { fill: var(--text-3); font-size: 12px; }
+.viz-tip { position: fixed; z-index: 10; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: #0b0b0b; border: 1px solid var(--ring); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  color: var(--text-1); box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+.viz-tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.viz-bar { display: grid; grid-template-columns: 120px 1fr 96px; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; }
+.viz-bar-l { color: var(--text-2); }
+.viz-bar-t { height: 14px; }
+.viz-bar-f { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+.viz-bar-v { color: var(--text-1); font-variant-numeric: tabular-nums; text-align: right; }
+.cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px; font-size: 13px; }
+.cm div { padding: 14px; border-radius: 8px; text-align: center; background: var(--surface-2); }
+.cm .h { background: none; color: var(--text-3); padding: 6px; }
+.cm .ok { background: color-mix(in srgb, var(--good) 28%, var(--surface)); }
+.cm .bad { background: color-mix(in srgb, var(--crit) 24%, var(--surface)); }
+.cm b { display: block; font-size: 24px; }
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s, transform .6s; }
+.reveal.in { opacity: 1; transform: none; }
+</style>
+<style>
+:root { --accent: #6250d6; --s4: #9085e9; }
+.flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 10px; align-items: stretch; }
+@media (max-width: 860px) { .flow { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); justify-self: center; } }
+.stage { background: var(--surface-2); border-radius: 14px; padding: 18px; border: 1px solid var(--ring); }
+.stage .n { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.stage h3 { margin: 6px 0 6px; font-size: 18px; }
+.stage p { margin: 0; font-size: 14px; color: var(--text-2); }
+.stage .m { margin-top: 12px; font-size: 26px; font-weight: 650; }
+.stage .m small { font-size: 13px; color: var(--text-3); font-weight: 400; display: block; }
+.arrow { align-self: center; color: var(--text-3); font-size: 26px; }
+.band { position: relative; overflow-x: auto; border-radius: 10px; background: #000; }
+.band img { display: block; height: 220px; width: auto; max-width: none; }
+.secs { display: flex; gap: 2px; margin-top: 8px; min-width: 100%; }
+.secs div { flex: 1; height: 26px; border-radius: 4px; font-size: 11px; display: flex; align-items: center; justify-content: center; color: #fff; cursor: default; }
+.d-OK { background: #1f3b2a; color: var(--text-2) !important; }
+.d-REVISAR { background: #c98500; color: #0b0b0b !important; }
+.d-RECHAZAR { background: #d03b3b; }
+.crops { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.crop { background: var(--surface-2); border-radius: 12px; overflow: hidden; font-size: 12px; }
+.crop img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; filter: contrast(1.1); }
+.crop div { padding: 8px 10px; }
+.crop b { display: block; font-size: 13px; }
+.crop .r { color: var(--text-3); margin-top: 4px; }
+.banner { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent); border-radius: 12px; padding: 12px 16px; font-size: 14px; margin-bottom: 20px; }
+.legend-sq i { width: 12px; height: 12px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <canvas id="bg"></canvas>
+  <div class="wrap">
+    <div class="eyebrow">Caso demo · Inspección visual industrial</div>
+    <h1>Un detector barato en cada fotograma, un modelo de visión-lenguaje solo cuando hace falta</h1>
+    <p class="lede">Inspección de defectos en una banda de acero laminado en caliente con una cascada: YOLO localiza en tiempo real,
+      un VLM local confirma y describe cada defecto con pocos recortes hasta llegar a consenso, y el sistema decide por tramo: OK, revisar o rechazar.</p>
+    <div class="tags"><span class="tag">YOLO11</span><span class="tag">VLM local (Ollama)</span><span class="tag">Consenso</span><span class="tag">Siderurgia</span><span class="tag">Datos públicos</span></div>
+  </div>
+</header>
+<main class="wrap">
+  <div class="banner" id="banner" hidden></div>
+  <section class="kpis reveal">
+    <div class="kpi hero-kpi"><div class="l">Llamadas al VLM evitadas</div><div class="v" id="k-save"></div><div class="d" id="k-save-d"></div></div>
+    <div class="kpi"><div class="l">Defectos reales localizados</div><div class="v" id="k-rec"></div><div class="d" id="k-rec-d"></div></div>
+    <div class="kpi"><div class="l">Tipo de defecto correcto</div><div class="v" id="k-acc"></div><div class="d" id="k-acc-d"></div></div>
+    <div class="kpi"><div class="l">Detector por fotograma (CPU)</div><div class="v" id="k-ms"></div><div class="d">sin GPU</div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card reveal">
+      <h2>La cascada</h2>
+      <p class="sub">Cada etapa hace solo el trabajo que le toca. El modelo caro ve una fracción mínima de las imágenes.</p>
+      <div class="flow">
+        <div class="stage"><div class="n" style="color:var(--s1)">Etapa 1 · cada fotograma</div><h3>Detector YOLO11n</h3><p>Localiza posibles defectos y los asocia entre fotogramas con la posición de la banda.</p><div class="m" id="st1"></div></div>
+        <div class="arrow">→</div>
+        <div class="stage"><div class="n" style="color:var(--s4)">Etapa 2 · pocos recortes</div><h3>VLM local</h3><p>Clasifica tipo y severidad. Se le pregunta hasta que dos respuestas coinciden (máx. 4 por defecto).</p><div class="m" id="st2"></div></div>
+        <div class="arrow">→</div>
+        <div class="stage"><div class="n" style="color:var(--s3)">Etapa 3 · por tramo</div><h3>Informe y decisión</h3><p>Defectos, tipos y severidad por tramo de banda: OK, revisar o rechazar.</p><div class="m" id="st3"></div></div>
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <h2>La banda inspeccionada</h2>
+      <p class="sub">Imágenes de validación que el detector no vio, montadas como una banda continua. NEU-DET solo contiene imágenes con defecto, así que casi todos los tramos tienen hallazgos. Recuadros: verde severidad baja · ámbar media · naranja alta. Desplaza horizontalmente.</p>
+      <div class="band" id="band"><img id="strip" alt="Banda de acero con defectos marcados"></div>
+      <div class="secs" id="secs"></div>
+      <div class="legend legend-sq" style="margin-top:10px"><span><i style="background:#1f3b2a"></i>OK</span><span><i style="background:#c98500"></i>Revisar</span><span><i style="background:#d03b3b"></i>Rechazar</span></div>
+    </div>
+
+    <div class="card span-8 reveal">
+      <h2>Trabajo por fotograma</h2>
+      <p class="sub">Detecciones del modelo ligero frente a llamadas al VLM a lo largo de la inspección (media móvil de 10 fotogramas).</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Detecciones YOLO</span><span><i style="background:var(--s4)"></i>Llamadas al VLM</span></div>
+      <div id="tl"></div>
+    </div>
+    <div class="card span-4 reveal">
+      <h2>Decisión por tramo</h2>
+      <p class="sub" id="sec-sub"></p>
+      <div id="dec"></div>
+    </div>
+
+    <div class="card reveal">
+      <h2>Defectos y lo que dijo el modelo</h2>
+      <p class="sub">Recortes de los defectos más persistentes, con la etiqueta final, la referencia y cuántas llamadas hicieron falta.</p>
+      <div class="crops" id="crops"></div>
+    </div>
+
+    <div class="card reveal">
+      <h2>Por qué en cascada</h2>
+      <div class="steps">
+        <div class="step"><b>Coste</b>Un VLM en cada fotograma es caro y lento. Aquí solo ve unos pocos recortes por defecto.</div>
+        <div class="step"><b>Fiabilidad</b>El consenso entre respuestas filtra salidas erráticas del VLM, y el VLM puede descartar falsos positivos del detector.</div>
+        <div class="step"><b>Privacidad</b>El VLM corre en local con Ollama: las imágenes de la planta no salen de la fábrica.</div>
+        <div class="step"><b>Explicable</b>Cada defecto lleva tipo, severidad y una razón en lenguaje natural para el informe de calidad.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div><b>Álvaro Martín Coll</b> · Físico · Ingeniero de IA para industria y energía<br>
+      <span class="note">Datos: NEU-DET, base de datos de defectos superficiales de banda laminada en caliente (Northeastern University), uso de investigación. Proyecto demostrativo, sin datos de clientes.</span></div>
+    <div><a class="cta" href="https://www.malt.com/profile/alvaromartincoll">Hablemos de tu línea</a></div>
+  </footer>
+</main>
+<script>/* Minimal SVG chart kit shared by the portfolio dashboards.
+   Line (crosshair + tooltip), scatter, horizontal bar. No dependencies. */
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const el = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const nice = (min, max, n = 5) => {
+    const span = max - min || 1;
+    const step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || 10 * mag;
+    const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+    const ticks = [];
+    for (let v = lo; v <= hi + step / 2; v += step) ticks.push(+v.toFixed(10));
+    return { lo, hi, ticks };
+  };
+  const fmt = (v) => {
+    const a = Math.abs(v);
+    if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+    if (a >= 1e4) return (v / 1e3).toFixed(0) + "K";
+    if (Number.isInteger(v)) return v.toLocaleString("es-ES");
+    return v.toLocaleString("es-ES", { maximumFractionDigits: 2 });
+  };
+
+  let tip;
+  const tooltip = () => {
+    if (!tip) { tip = document.createElement("div"); tip.className = "viz-tip"; document.body.appendChild(tip); }
+    return tip;
+  };
+  const showTip = (html, ev) => {
+    const t = tooltip(); t.innerHTML = html; t.style.opacity = 1;
+    const r = t.getBoundingClientRect();
+    let x = ev.clientX + 14, y = ev.clientY + 14;
+    if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+    if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+    t.style.left = x + "px"; t.style.top = y + "px";
+  };
+  const hideTip = () => { if (tip) tip.style.opacity = 0; };
+
+  function frame(host, o) {
+    host.innerHTML = "";
+    const W = host.clientWidth || 600, H = o.height || 300;
+    const m = { t: 12, r: o.right || 16, b: o.xLabel ? 44 : 28, l: 52 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+                             "aria-label": o.aria || "" }, host);
+    return { svg, W, H, m, iw: W - m.l - m.r, ih: H - m.t - m.b };
+  }
+  function axes(f, xs, ys, o) {
+    const g = el("g", {}, f.svg);
+    ys.ticks.forEach((v) => {
+      const y = f.m.t + f.ih - ((v - ys.lo) / (ys.hi - ys.lo)) * f.ih;
+      el("line", { x1: f.m.l, x2: f.m.l + f.iw, y1: y, y2: y, stroke: css("--grid"), "stroke-width": 1 }, g);
+      const t = el("text", { x: f.m.l - 8, y: y + 4, "text-anchor": "end", class: "viz-tick" }, g);
+      t.textContent = (o.yFmt || fmt)(v);
+    });
+    xs.ticks.forEach((v) => {
+      const x = f.m.l + ((v - xs.lo) / (xs.hi - xs.lo)) * f.iw;
+      const t = el("text", { x, y: f.m.t + f.ih + 18, "text-anchor": "middle", class: "viz-tick" }, g);
+      t.textContent = (o.xFmt || fmt)(v);
+    });
+    el("line", { x1: f.m.l, x2: f.m.l + f.iw, y1: f.m.t + f.ih, y2: f.m.t + f.ih, stroke: css("--axis") }, g);
+    if (o.xLabel) {
+      const t = el("text", { x: f.m.l + f.iw / 2, y: f.H - 6, "text-anchor": "middle", class: "viz-label" }, g);
+      t.textContent = o.xLabel;
+    }
+    if (o.yLabel) {
+      const t = el("text", { x: 12, y: f.m.t + f.ih / 2, "text-anchor": "middle", class: "viz-label",
+                              transform: `rotate(-90 12 ${f.m.t + f.ih / 2})` }, g);
+      t.textContent = o.yLabel;
+    }
+  }
+
+  /* series: [{name, values, color, dash, fill}] ; x: array of numbers */
+  function line(host, o) {
+    const f = frame(host, o);
+    const all = o.series.flatMap((s) => s.values.filter((v) => v != null));
+    const xs = nice(Math.min(...o.x), Math.max(...o.x), o.xTicks || 6);
+    xs.lo = Math.min(...o.x); xs.hi = Math.max(...o.x);
+    xs.ticks = xs.ticks.filter((v) => v >= xs.lo && v <= xs.hi);
+    const ys = nice(o.yMin ?? Math.min(0, ...all), o.yMax ?? Math.max(...all), 5);
+    axes(f, xs, ys, o);
+    const X = (v) => f.m.l + ((v - xs.lo) / (xs.hi - xs.lo)) * f.iw;
+    const Y = (v) => f.m.t + f.ih - ((v - ys.lo) / (ys.hi - ys.lo)) * f.ih;
+    if (o.band) { // horizontal band e.g. alert zone
+      el("rect", { x: f.m.l, width: f.iw, y: Y(o.band.to), height: Y(o.band.from) - Y(o.band.to),
+                   fill: o.band.color, opacity: 0.12 }, f.svg);
+      const t = el("text", { x: f.m.l + f.iw - 6, y: Y(o.band.to) + 14, "text-anchor": "end", class: "viz-tick" }, f.svg);
+      t.textContent = o.band.label;
+    }
+    o.series.forEach((s) => {
+      let d = "", pen = false;
+      s.values.forEach((v, i) => {
+        if (v == null) { pen = false; return; }
+        d += (pen ? "L" : "M") + X(o.x[i]).toFixed(1) + "," + Y(v).toFixed(1); pen = true;
+      });
+      if (s.fill) {
+        const first = s.values.findIndex((v) => v != null);
+        const last = s.values.length - 1 - [...s.values].reverse().findIndex((v) => v != null);
+        el("path", { d: d + `L${X(o.x[last])},${Y(ys.lo)}L${X(o.x[first])},${Y(ys.lo)}Z`,
+                     fill: s.color, opacity: 0.1 }, f.svg);
+      }
+      el("path", { d, fill: "none", stroke: s.color, "stroke-width": s.width || 2,
+                   "stroke-linejoin": "round", "stroke-linecap": "round",
+                   "stroke-dasharray": s.dash || "" }, f.svg);
+    });
+    // crosshair
+    const hair = el("line", { y1: f.m.t, y2: f.m.t + f.ih, stroke: css("--axis"), opacity: 0 }, f.svg);
+    const dots = o.series.map((s) => el("circle", { r: 4, fill: s.color, stroke: css("--surface"),
+                                                     "stroke-width": 2, opacity: 0 }, f.svg));
+    const hit = el("rect", { x: f.m.l, y: f.m.t, width: f.iw, height: f.ih, fill: "transparent" }, f.svg);
+    hit.addEventListener("mousemove", (ev) => {
+      const r = f.svg.getBoundingClientRect();
+      const px = ((ev.clientX - r.left) / r.width) * f.W;
+      const xv = xs.lo + ((px - f.m.l) / f.iw) * (xs.hi - xs.lo);
+      let i = 0, best = Infinity;
+      o.x.forEach((v, k) => { const d = Math.abs(v - xv); if (d < best) { best = d; i = k; } });
+      hair.setAttribute("x1", X(o.x[i])); hair.setAttribute("x2", X(o.x[i])); hair.setAttribute("opacity", 1);
+      let html = `<b>${(o.xTip || ((v) => (o.xLabel || "x") + " " + fmt(v)))(o.x[i])}</b>`;
+      o.series.forEach((s, k) => {
+        const v = s.values[i];
+        if (v == null) { dots[k].setAttribute("opacity", 0); return; }
+        dots[k].setAttribute("cx", X(o.x[i])); dots[k].setAttribute("cy", Y(v)); dots[k].setAttribute("opacity", 1);
+        html += `<div><i style="background:${s.color}"></i>${s.name}: <b>${(o.yTip || fmt)(v)}</b></div>`;
+      });
+      showTip(html, ev);
+    });
+    hit.addEventListener("mouseleave", () => { hair.setAttribute("opacity", 0); dots.forEach((d) => d.setAttribute("opacity", 0)); hideTip(); });
+  }
+
+  /* points: [{x, y, label}] */
+  function scatter(host, o) {
+    const f = frame(host, o);
+    const vx = o.points.map((p) => p.x), vy = o.points.map((p) => p.y);
+    const lo = Math.min(0, ...vx, ...vy), hi = Math.max(...vx, ...vy);
+    const xs = nice(lo, hi, 5), ys = nice(lo, hi, 5);
+    axes(f, xs, ys, o);
+    const X = (v) => f.m.l + ((v - xs.lo) / (xs.hi - xs.lo)) * f.iw;
+    const Y = (v) => f.m.t + f.ih - ((v - ys.lo) / (ys.hi - ys.lo)) * f.ih;
+    if (o.diag) el("line", { x1: X(xs.lo), y1: Y(ys.lo), x2: X(Math.min(xs.hi, ys.hi)), y2: Y(Math.min(xs.hi, ys.hi)),
+                             stroke: css("--text-3"), "stroke-width": 1 }, f.svg);
+    o.points.forEach((p) => {
+      const c = el("circle", { cx: X(p.x), cy: Y(p.y), r: 4.5, fill: p.color || o.color,
+                               stroke: css("--surface"), "stroke-width": 2 }, f.svg);
+      const h = el("circle", { cx: X(p.x), cy: Y(p.y), r: 10, fill: "transparent" }, f.svg);
+      h.addEventListener("mousemove", (ev) => { c.setAttribute("r", 6); showTip(p.tip || `${fmt(p.x)} → ${fmt(p.y)}`, ev); });
+      h.addEventListener("mouseleave", () => { c.setAttribute("r", 4.5); hideTip(); });
+    });
+  }
+
+  /* items: [{label, value}] horizontal bars, value labels at tip */
+  function bars(host, o) {
+    host.innerHTML = "";
+    const max = Math.max(...o.items.map((d) => d.value));
+    o.items.forEach((d) => {
+      const row = document.createElement("div"); row.className = "viz-bar";
+      row.innerHTML = `<span class="viz-bar-l">${d.label}</span>
+        <span class="viz-bar-t"><span class="viz-bar-f" style="width:${(100 * d.value) / max}%;background:${d.color || o.color}"></span></span>
+        <span class="viz-bar-v">${(o.fmt || fmt)(d.value)}</span>`;
+      row.addEventListener("mousemove", (ev) => showTip(`<b>${d.label}</b><div>${(o.fmt || fmt)(d.value)}</div>`, ev));
+      row.addEventListener("mouseleave", hideTip);
+      host.appendChild(row);
+    });
+  }
+
+  /* Animate numbers counting up (data-count attr) */
+  function countUp(root = document) {
+    root.querySelectorAll("[data-count]").forEach((e) => {
+      const target = parseFloat(e.dataset.count), dec = +(e.dataset.dec || 0);
+      const pre = e.dataset.pre || "", suf = e.dataset.suf || "";
+      const t0 = performance.now(), dur = 1200;
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / dur), v = target * (1 - Math.pow(1 - k, 3));
+        e.textContent = pre + v.toLocaleString("es-ES", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  window.Viz = { line, scatter, bars, countUp, fmt };
+})();
+</script>
+<script>
+const R = {"metrics": {"frames": 701, "tracks": 152, "gt_defects": 225, "gt_found": 135, "recall": 0.6, "precision": 0.901, "class_acc_detector": 0.971, "class_acc_cascade": 0.964, "vlm_calls": 281, "vlm_calls_if_every_frame": 6336, "consensus_rate": 0.895, "fp_suppressed_by_vlm": 0, "ms_det_per_frame": 21.7, "s_vlm_total": 0.0, "backend": "detector", "vlm_saving_pct": 95.6}, "sections": [{"section": 1, "defects": 4, "types": {"rolled-in_scale": 3, "scratches": 1}, "decision": "REVISAR"}, {"section": 2, "defects": 5, "types": {"patches": 3, "inclusion": 1, "pitted_surface": 1}, "decision": "RECHAZAR"}, {"section": 3, "defects": 4, "types": {"scratches": 1, "pitted_surface": 2, "inclusion": 1}, "decision": "RECHAZAR"}, {"section": 4, "defects": 7, "types": {"rolled-in_scale": 2, "inclusion": 5}, "decision": "RECHAZAR"}, {"section": 5, "defects": 7, "types": {"scratches": 3, "rolled-in_scale": 1, "patches": 2, "pitted_surface": 1}, "decision": "RECHAZAR"}, {"section": 6, "defects": 2, "types": {"rolled-in_scale": 1, "scratches": 1}, "decision": "RECHAZAR"}, {"section": 7, "defects": 3, "types": {"inclusion": 2, "crazing": 1}, "decision": "REVISAR"}, {"section": 8, "defects": 3, "types": {"inclusion": 1, "patches": 1, "rolled-in_scale": 1}, "decision": "REVISAR"}, {"section": 9, "defects": 5, "types": {"scratches": 2, "inclusion": 2, "rolled-in_scale": 1}, "decision": "RECHAZAR"}, {"section": 10, "defects": 5, "types": {"rolled-in_scale": 2, "patches": 3}, "decision": "RECHAZAR"}, {"section": 11, "defects": 5, "types": {"crazing": 4, "pitted_surface": 1}, "decision": "RECHAZAR"}, {"section": 12, "defects": 5, "types": {"patches": 4, "rolled-in_scale": 1}, "decision": "RECHAZAR"}, {"section": 13, "defects": 8, "types": {"patches": 5, "scratches": 2, "inclusion": 1}, "decision": "RECHAZAR"}, {"section": 14, "defects": 5, "types": {"inclusion": 1, "scratches": 1, "patches": 3}, "decision": "RECHAZAR"}, {"section": 15, "defects": 6, "types": {"scratches": 3, "patches": 2, "inclusion": 1}, "decision": "RECHAZAR"}, {"section": 16, "defects": 4, "types": {"patches": 2, "rolled-in_scale": 2}, "decision": "RECHAZAR"}, {"section": 17, "defects": 3, "types": {"crazing": 1, "scratches": 2}, "decision": "RECHAZAR"}, {"section": 18, "defects": 5, "types": {"patches": 2, "rolled-in_scale": 2, "pitted_surface": 1}, "decision": "RECHAZAR"}, {"section": 19, "defects": 9, "types": {"scratches": 2, "patches": 6, "inclusion": 1}, "decision": "RECHAZAR"}, {"section": 20, "defects": 3, "types": {"inclusion": 2, "crazing": 1}, "decision": "REVISAR"}, {"section": 21, "defects": 4, "types": {"pitted_surface": 1, "crazing": 3}, "decision": "RECHAZAR"}, {"section": 22, "defects": 5, "types": {"patches": 3, "inclusion": 2}, "decision": "RECHAZAR"}, {"section": 23, "defects": 4, "types": {"crazing": 2, "patches": 2}, "decision": "RECHAZAR"}, {"section": 24, "defects": 4, "types": {"pitted_surface": 1, "inclusion": 2, "crazing": 1}, "decision": "RECHAZAR"}, {"section": 25, "defects": 6, "types": {"inclusion": 5, "scratches": 1}, "decision": "RECHAZAR"}, {"section": 26, "defects": 10, "types": {"patches": 7, "inclusion": 3}, "decision": "RECHAZAR"}, {"section": 27, "defects": 5, "types": {"patches": 3, "inclusion": 1, "crazing": 1}, "decision": "RECHAZAR"}, {"section": 28, "defects": 4, "types": {"inclusion": 3, "patches": 1}, "decision": "REVISAR"}, {"section": 29, "defects": 7, "types": {"patches": 6, "inclusion": 1}, "decision": "RECHAZAR"}, {"section": 30, "defects": 5, "types": {"patches": 2, "scratches": 2, "inclusion": 1}, "decision": "RECHAZAR"}], "examples": [{"img": "crop_109.jpg", "final": "scratches", "det_label": "scratches", "gt": "scratches", "severity": "low", "vlm_calls": 2, "frames": 100, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_66.jpg", "final": "patches", "det_label": "patches", "gt": "patches", "severity": "medium", "vlm_calls": 2, "frames": 96, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_25.jpg", "final": "scratches", "det_label": "scratches", "gt": "scratches", "severity": "medium", "vlm_calls": 2, "frames": 95, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_115.jpg", "final": "scratches", "det_label": "scratches", "gt": "scratches", "severity": "medium", "vlm_calls": 2, "frames": 89, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_16.jpg", "final": "rolled-in_scale", "det_label": "rolled-in_scale", "gt": "rolled-in_scale", "severity": "high", "vlm_calls": 2, "frames": 84, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_88.jpg", "final": "scratches", "det_label": "scratches", "gt": "scratches", "severity": "medium", "vlm_calls": 2, "frames": 80, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_124.jpg", "final": "pitted_surface", "det_label": "pitted_surface", "gt": "pitted_surface", "severity": "high", "vlm_calls": 1, "frames": 73, "consensus": false, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_71.jpg", "final": "patches", "det_label": "patches", "gt": "patches", "severity": "medium", "vlm_calls": 2, "frames": 72, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_24.jpg", "final": "scratches", "det_label": "scratches", "gt": "scratches", "severity": "medium", "vlm_calls": 2, "frames": 71, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_36.jpg", "final": "inclusion", "det_label": "inclusion", "gt": "inclusion", "severity": "medium", "vlm_calls": 2, "frames": 69, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_148.jpg", "final": "inclusion", "det_label": "inclusion", "gt": "inclusion", "severity": "medium", "vlm_calls": 2, "frames": 69, "consensus": true, "reason": "modo sin VLM (eco del detector)"}, {"img": "crop_53.jpg", "final": "rolled-in_scale", "det_label": "rolled-in_scale", "gt": "rolled-in_scale", "severity": "medium", "vlm_calls": 2, "frames": 68, "consensus": true, "reason": "modo sin VLM (eco del detector)"}], "timeline": [[0, 9, 6], [1, 7, 0], [2, 8, 1], [3, 8, 0], [4, 10, 0], [5, 8, 0], [6, 7, 5], [7, 7, 1], [8, 7, 1], [9, 9, 1], [10, 10, 0], [11, 10, 1], [12, 7, 0], [13, 8, 0], [14, 8, 1], [15, 9, 1], [16, 8, 1], [17, 8, 1], [18, 8, 0], [19, 8, 0], [20, 7, 0], [21, 6, 0], [22, 5, 0], [23, 5, 0], [24, 7, 0], [25, 7, 0], [26, 5, 0], [27, 8, 1], [28, 6, 0], [29, 7, 0], [30, 8, 0], [31, 6, 0], [32, 10, 1], [33, 9, 0], [34, 9, 2], [35, 9, 1], [36, 7, 0], [37, 10, 0], [38, 10, 1], [39, 13, 1], [40, 10, 3], [41, 13, 1], [42, 12, 0], [43, 12, 0], [44, 10, 0], [45, 7, 0], [46, 9, 2], [47, 9, 0], [48, 10, 0], [49, 10, 0], [50, 7, 1], [51, 7, 0], [52, 6, 0], [53, 12, 1], [54, 8, 0], [55, 9, 0], [56, 10, 1], [57, 11, 0], [58, 12, 0], [59, 13, 1], [60, 14, 0], [61, 13, 0], [62, 14, 0], [63, 13, 1], [64, 9, 1], [65, 10, 0], [66, 10, 0], [67, 13, 0], [68, 10, 0], [69, 12, 1], [70, 10, 1], [71, 9, 0], [72, 11, 0], [73, 11, 1], [74, 11, 0], [75, 11, 1], [76, 12, 2], [77, 12, 0], [78, 10, 1], [79, 9, 1], [80, 8, 0], [81, 9, 0], [82, 11, 2], [83, 11, 0], [84, 9, 0], [85, 9, 0], [86, 9, 0], [87, 10, 1], [88, 10, 0], [89, 9, 0], [90, 10, 0], [91, 10, 0], [92, 12, 1], [93, 9, 1], [94, 7, 0], [95, 7, 0], [96, 7, 0], [97, 10, 0], [98, 9, 1], [99, 8, 1], [100, 9, 0], [101, 9, 0], [102, 9, 0], [103, 8, 0], [104, 9, 0], [105, 10, 0], [106, 8, 0], [107, 7, 0], [108, 10, 0], [109, 9, 0], [110, 8, 0], [111, 9, 0], [112, 10, 1], [113, 8, 0], [114, 9, 0], [115, 8, 0], [116, 7, 1], [117, 7, 0], [118, 7, 0], [119, 8, 1], [120, 7, 0], [121, 5, 0], [122, 5, 0], [123, 5, 0], [124, 4, 0], [125, 4, 0], [126, 5, 1], [127, 6, 1], [128, 6, 0], [129, 5, 0], [130, 4, 0], [131, 9, 0], [132, 7, 0], [133, 9, 1], [134, 9, 0], [135, 6, 0], [136, 7, 0], [137, 5, 0], [138, 7, 1], [139, 6, 0], [140, 6, 0], [141, 6, 0], [142, 7, 1], [143, 7, 0], [144, 6, 1], [145, 6, 0], [146, 7, 0], [147, 6, 0], [148, 7, 1], [149, 6, 0], [150, 7, 0], [151, 5, 1], [152, 6, 0], [153, 7, 0], [154, 5, 0], [155, 7, 0], [156, 7, 0], [157, 8, 1], [158, 8, 0], [159, 9, 0], [160, 7, 1], [161, 8, 0], [162, 9, 0], [163, 10, 0], [164, 8, 0], [165, 8, 0], [166, 7, 1], [167, 8, 0], [168, 8, 1], [169, 8, 1], [170, 8, 0], [171, 7, 1], [172, 8, 0], [173, 8, 0], [174, 8, 1], [175, 8, 0], [176, 8, 0], [177, 10, 3], [178, 8, 0], [179, 10, 0], [180, 9, 0], [181, 10, 0], [182, 9, 0], [183, 9, 2], [184, 9, 0], [185, 9, 0], [186, 9, 1], [187, 8, 0], [188, 10, 0], [189, 9, 0], [190, 10, 0], [191, 8, 0], [192, 8, 1], [193, 9, 0], [194, 9, 0], [195, 9, 1], [196, 9, 0], [197, 8, 0], [198, 9, 0], [199, 10, 0], [200, 10, 1], [201, 9, 2], [202, 10, 0], [203, 10, 0], [204, 9, 0], [205, 9, 0], [206, 8, 2], [207, 10, 1], [208, 10, 0], [209, 9, 0], [210, 7, 0], [211, 9, 1], [212, 9, 1], [213, 8, 0], [214, 8, 0], [215, 7, 0], [216, 8, 1], [217, 7, 1], [218, 6, 0], [219, 5, 0], [220, 7, 0], [221, 7, 0], [222, 7, 1], [223, 5, 0], [224, 6, 0], [225, 8, 0], [226, 6, 1], [227, 8, 1], [228, 7, 0], [229, 7, 1], [230, 5, 0], [231, 8, 1], [232, 8, 1], [233, 7, 0], [234, 8, 1], [235, 10, 0], [236, 10, 0], [237, 8, 0], [238, 7, 1], [239, 8, 0], [240, 9, 1], [241, 10, 0], [242, 9, 1], [243, 8, 1], [244, 9, 0], [245, 8, 0], [246, 8, 0], [247, 8, 0], [248, 8, 1], [249, 9, 3], [250, 8, 0], [251, 8, 0], [252, 9, 1], [253, 7, 0], [254, 8, 0], [255, 9, 0], [256, 10, 0], [257, 10, 1], [258, 10, 1], [259, 12, 0], [260, 10, 0], [261, 11, 0], [262, 10, 0], [263, 10, 1], [264, 12, 0], [265, 11, 0], [266, 13, 2], [267, 11, 0], [268, 11, 0], [269, 11, 1], [270, 10, 0], [271, 11, 0], [272, 11, 1], [273, 12, 2], [274, 13, 0], [275, 13, 2], [276, 13, 1], [277, 11, 0], [278, 12, 0], [279, 11, 1], [280, 12, 0], [281, 11, 2], [282, 12, 2], [283, 10, 0], [284, 12, 0], [285, 13, 0], [286, 11, 0], [287, 13, 1], [288, 11, 0], [289, 12, 0], [290, 12, 0], [291, 12, 0], [292, 13, 0], [293, 11, 0], [294, 14, 1], [295, 10, 0], [296, 10, 0], [297, 10, 0], [298, 12, 1], [299, 11, 0], [300, 12, 0], [301, 14, 1], [302, 11, 2], [303, 12, 0], [304, 10, 1], [305, 13, 0], [306, 12, 0], [307, 13, 0], [308, 12, 1], [309, 12, 0], [310, 12, 0], [311, 13, 1], [312, 13, 0], [313, 12, 0], [314, 12, 0], [315, 12, 0], [316, 12, 1], [317, 12, 2], [318, 13, 1], [319, 11, 0], [320, 11, 0], [321, 11, 0], [322, 11, 1], [323, 10, 1], [324, 9, 1], [325, 10, 1], [326, 10, 2], [327, 11, 0], [328, 8, 0], [329, 11, 0], [330, 10, 0], [331, 12, 1], [332, 10, 2], [333, 11, 0], [334, 11, 0], [335, 14, 0], [336, 10, 0], [337, 10, 0], [338, 11, 0], [339, 13, 1], [340, 14, 0], [341, 13, 1], [342, 12, 1], [343, 11, 0], [344, 11, 0], [345, 11, 1], [346, 10, 0], [347, 10, 1], [348, 11, 1], [349, 11, 0], [350, 11, 0], [351, 10, 1], [352, 10, 0], [353, 9, 0], [354, 11, 0], [355, 11, 0], [356, 9, 0], [357, 11, 1], [358, 12, 0], [359, 11, 0], [360, 9, 0], [361, 10, 0], [362, 11, 1], [363, 8, 0], [364, 9, 0], [365, 9, 0], [366, 9, 0], [367, 9, 0], [368, 9, 1], [369, 9, 0], [370, 7, 0], [371, 8, 0], [372, 7, 0], [373, 6, 0], [374, 7, 0], [375, 9, 0], [376, 8, 2], [377, 7, 0], [378, 7, 0], [379, 7, 0], [380, 7, 0], [381, 7, 0], [382, 6, 2], [383, 6, 0], [384, 6, 0], [385, 9, 1], [386, 8, 0], [387, 6, 0], [388, 6, 0], [389, 5, 0], [390, 6, 0], [391, 5, 0], [392, 6, 0], [393, 7, 1], [394, 6, 0], [395, 5, 0], [396, 7, 0], [397, 5, 0], [398, 7, 0], [399, 6, 1], [400, 6, 0], [401, 8, 1], [402, 7, 1], [403, 7, 0], [404, 6, 0], [405, 9, 1], [406, 9, 0], [407, 11, 3], [408, 14, 1], [409, 12, 0], [410, 13, 0], [411, 12, 0], [412, 14, 1], [413, 12, 1], [414, 14, 0], [415, 13, 0], [416, 11, 0], [417, 10, 0], [418, 10, 1], [419, 11, 0], [420, 12, 0], [421, 12, 0], [422, 11, 0], [423, 11, 1], [424, 13, 0], [425, 14, 0], [426, 12, 3], [427, 11, 2], [428, 10, 0], [429, 12, 1], [430, 12, 0], [431, 11, 0], [432, 12, 3], [433, 11, 2], [434, 13, 0], [435, 12, 0], [436, 12, 1], [437, 12, 1], [438, 12, 0], [439, 11, 0], [440, 12, 0], [441, 12, 0], [442, 12, 1], [443, 13, 0], [444, 11, 0], [445, 11, 0], [446, 12, 0], [447, 12, 1], [448, 12, 0], [449, 11, 0], [450, 10, 0], [451, 10, 0], [452, 9, 1], [453, 11, 0], [454, 9, 0], [455, 12, 1], [456, 11, 0], [457, 9, 0], [458, 8, 1], [459, 10, 1], [460, 11, 0], [461, 9, 0], [462, 10, 1], [463, 10, 0], [464, 13, 1], [465, 11, 0], [466, 13, 1], [467, 11, 0], [468, 11, 0], [469, 12, 0], [470, 12, 0], [471, 8, 0], [472, 4, 1], [473, 5, 0], [474, 6, 0], [475, 5, 0], [476, 5, 0], [477, 4, 0], [478, 4, 0], [479, 4, 0], [480, 5, 0], [481, 5, 0], [482, 5, 1], [483, 5, 0], [484, 5, 1], [485, 4, 0], [486, 3, 0], [487, 6, 1], [488, 6, 0], [489, 4, 0], [490, 3, 0], [491, 4, 1], [492, 4, 1], [493, 5, 0], [494, 5, 0], [495, 4, 0], [496, 6, 1], [497, 5, 0], [498, 7, 1], [499, 7, 0], [500, 8, 0], [501, 7, 2], [502, 5, 1], [503, 6, 0], [504, 7, 1], [505, 6, 0], [506, 7, 0], [507, 7, 2], [508, 7, 1], [509, 6, 0], [510, 7, 1], [511, 8, 0], [512, 8, 0], [513, 6, 0], [514, 6, 0], [515, 5, 0], [516, 5, 1], [517, 6, 0], [518, 6, 0], [519, 6, 0], [520, 7, 0], [521, 7, 0], [522, 7, 0], [523, 6, 0], [524, 6, 0], [525, 7, 1], [526, 7, 0], [527, 8, 1], [528, 6, 0], [529, 8, 0], [530, 7, 1], [531, 5, 0], [532, 6, 0], [533, 7, 0], [534, 10, 1], [535, 8, 0], [536, 9, 2], [537, 7, 0], [538, 5, 0], [539, 8, 1], [540, 6, 0], [541, 6, 0], [542, 5, 2], [543, 4, 0], [544, 4, 0], [545, 5, 0], [546, 6, 0], [547, 3, 0], [548, 5, 1], [549, 4, 0], [550, 4, 0], [551, 3, 0], [552, 3, 2], [553, 4, 0], [554, 4, 0], [555, 3, 0], [556, 5, 0], [557, 5, 1], [558, 6, 1], [559, 9, 1], [560, 8, 0], [561, 8, 0], [562, 10, 0], [563, 8, 0], [564, 9, 0], [565, 8, 0], [566, 8, 0], [567, 10, 0], [568, 9, 0], [569, 10, 0], [570, 9, 0], [571, 11, 0], [572, 8, 0], [573, 9, 1], [574, 8, 0], [575, 8, 0], [576, 9, 1], [577, 8, 2], [578, 8, 0], [579, 9, 2], [580, 7, 0], [581, 8, 0], [582, 9, 1], [583, 12, 2], [584, 11, 0], [585, 13, 1], [586, 12, 0], [587, 11, 0], [588, 13, 1], [589, 11, 0], [590, 13, 0], [591, 11, 0], [592, 11, 0], [593, 13, 0], [594, 12, 1], [595, 13, 0], [596, 13, 1], [597, 14, 0], [598, 13, 1], [599, 12, 0], [600, 13, 1], [601, 15, 2], [602, 13, 2], [603, 12, 0], [604, 11, 1], [605, 12, 0], [606, 13, 1], [607, 12, 2], [608, 11, 1], [609, 14, 0], [610, 15, 0], [611, 15, 0], [612, 13, 0], [613, 12, 0], [614, 13, 0], [615, 13, 1], [616, 11, 0], [617, 12, 0], [618, 12, 0], [619, 11, 0], [620, 11, 1], [621, 10, 1], [622, 9, 0], [623, 11, 2], [624, 13, 1], [625, 12, 0], [626, 11, 2], [627, 11, 0], [628, 10, 0], [629, 12, 1], [630, 12, 1], [631, 10, 0], [632, 9, 1], [633, 8, 0], [634, 11, 1], [635, 9, 0], [636, 11, 0], [637, 9, 0], [638, 9, 0], [639, 10, 0], [640, 10, 0], [641, 11, 1], [642, 10, 0], [643, 11, 0], [644, 12, 0], [645, 9, 0], [646, 8, 0], [647, 6, 0], [648, 7, 1], [649, 6, 0], [650, 6, 0], [651, 7, 0], [652, 8, 1], [653, 6, 0], [654, 5, 1], [655, 7, 0], [656, 7, 1], [657, 10, 1], [658, 9, 1], [659, 9, 0], [660, 10, 1], [661, 10, 0], [662, 9, 1], [663, 9, 2], [664, 9, 0], [665, 10, 0], [666, 10, 1], [667, 11, 0], [668, 10, 0], [669, 9, 1], [670, 8, 0], [671, 7, 0], [672, 9, 1], [673, 8, 0], [674, 11, 0], [675, 11, 0], [676, 11, 2], [677, 11, 2], [678, 11, 2], [679, 8, 0], [680, 11, 0], [681, 11, 0], [682, 14, 1], [683, 11, 1], [684, 11, 1], [685, 11, 0], [686, 10, 0], [687, 11, 0], [688, 12, 1], [689, 15, 1], [690, 12, 1], [691, 16, 0], [692, 16, 1], [693, 13, 0], [694, 14, 2], [695, 13, 0], [696, 14, 0], [697, 14, 1], [698, 12, 0], [699, 13, 0], [700, 13, 2]], "defects": [{"id": 109, "box": [331.3, 3600.9, 360.3, 3797.6], "frames": 100, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.478}, {"id": 66, "box": [330.6, 2232.8, 394.6, 2359.6], "frames": 96, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.47}, {"id": 25, "box": [484.5, 801.2, 517.1, 996.6], "frames": 95, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.393}, {"id": 115, "box": [288.5, 3602.9, 325.5, 3798.4], "frames": 89, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.528}, {"id": 16, "box": [0.7, 607.1, 136.9, 759.6], "frames": 84, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.361}, {"id": 88, "box": [1.0, 2801.6, 41.8, 2969.1], "frames": 80, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.512}, {"id": 124, "box": [406.3, 4003.3, 599.4, 4392.0], "frames": 73, "det_label": "pitted_surface", "final": "pitted_surface", "severity": "high", "consensus": false, "vlm_calls": 1, "gt": "pitted_surface", "mean_conf": 0.431}, {"id": 71, "box": [128.3, 2401.5, 201.3, 2594.2], "frames": 72, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.536}, {"id": 24, "box": [442.2, 800.9, 485.7, 996.6], "frames": 71, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.544}, {"id": 36, "box": [257.6, 1219.0, 317.4, 1394.8], "frames": 69, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.342}, {"id": 148, "box": [432.1, 4811.6, 510.5, 4996.4], "frames": 69, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.438}, {"id": 53, "box": [66.3, 1821.5, 159.6, 1977.1], "frames": 68, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.275}, {"id": 94, "box": [49.1, 3000.4, 152.1, 3194.6], "frames": 68, "det_label": "patches", "final": "patches", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.784}, {"id": 127, "box": [1.0, 4203.1, 189.3, 4334.8], "frames": 68, "det_label": "patches", "final": "patches", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.635}, {"id": 179, "box": [523.5, 5601.7, 592.6, 5691.2], "frames": 68, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.43}, {"id": 52, "box": [462.5, 1802.1, 544.6, 1992.1], "frames": 67, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.722}, {"id": 155, "box": [0.8, 5000.8, 71.2, 5192.9], "frames": 67, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.722}, {"id": 163, "box": [305.7, 5072.8, 397.3, 5171.8], "frames": 67, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.349}, {"id": 101, "box": [403.3, 3233.9, 575.5, 3385.6], "frames": 66, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.198}, {"id": 111, "box": [399.2, 3602.1, 481.0, 3796.8], "frames": 66, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.677}, {"id": 112, "box": [126.5, 3609.3, 197.1, 3797.1], "frames": 66, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.637}, {"id": 104, "box": [201.5, 3447.7, 270.2, 3586.6], "frames": 65, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.487}, {"id": 147, "box": [293.5, 4802.9, 385.0, 4997.3], "frames": 64, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.346}, {"id": 34, "box": [447.0, 1207.9, 500.6, 1399.8], "frames": 63, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.65}, {"id": 157, "box": [219.4, 5008.9, 278.9, 5171.5], "frames": 63, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.515}, {"id": 89, "box": [513.4, 2801.8, 559.5, 2998.9], "frames": 62, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.678}, {"id": 165, "box": [468.3, 5235.8, 524.5, 5376.9], "frames": 62, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.644}, {"id": 26, "box": [268.2, 819.4, 345.5, 909.6], "frames": 61, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.424}, {"id": 67, "box": [215.4, 2290.8, 297.1, 2399.8], "frames": 61, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.653}, {"id": 79, "box": [326.8, 2603.7, 386.6, 2794.6], "frames": 61, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.249}, {"id": 100, "box": [294.4, 3199.4, 330.1, 3396.9], "frames": 61, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.555}, {"id": 131, "box": [246.6, 4214.3, 299.0, 4395.3], "frames": 61, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.242}, {"id": 158, "box": [437.9, 5009.7, 491.5, 5088.8], "frames": 61, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.259}, {"id": 180, "box": [133.5, 5603.8, 199.1, 5684.7], "frames": 61, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.186}, {"id": 41, "box": [85.9, 1400.9, 127.9, 1595.4], "frames": 60, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.327}, {"id": 46, "box": [126.3, 1603.0, 150.6, 1792.4], "frames": 60, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": true, "vlm_calls": 3, "gt": "scratches", "mean_conf": 0.293}, {"id": 70, "box": [4.9, 2399.4, 94.2, 2522.3], "frames": 60, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.762}, {"id": 72, "box": [329.0, 2425.1, 396.1, 2567.9], "frames": 60, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.571}, {"id": 42, "box": [294.0, 1414.4, 347.7, 1521.7], "frames": 59, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.661}, {"id": 43, "box": [416.3, 1415.2, 511.9, 1508.8], "frames": 59, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.309}, {"id": 73, "box": [416.4, 2441.8, 600.0, 2492.4], "frames": 59, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.63}, {"id": 160, "box": [124.9, 5062.8, 195.2, 5199.2], "frames": 59, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.719}, {"id": 99, "box": [272.7, 3199.9, 319.0, 3395.8], "frames": 58, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.289}, {"id": 116, "box": [509.4, 3678.6, 600.0, 3799.5], "frames": 58, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.738}, {"id": 117, "box": [44.9, 3729.9, 98.9, 3777.0], "frames": 58, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.326}, {"id": 65, "box": [445.5, 2212.4, 562.8, 2385.8], "frames": 57, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.25}, {"id": 74, "box": [230.5, 2466.4, 279.7, 2583.7], "frames": 56, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.404}, {"id": 20, "box": [221.5, 667.0, 258.3, 787.2], "frames": 55, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.594}, {"id": 31, "box": [206.1, 1006.8, 355.9, 1137.7], "frames": 55, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.453}, {"id": 95, "box": [0.4, 3003.4, 37.3, 3113.3], "frames": 55, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.273}, {"id": 151, "box": [34.9, 4806.3, 69.1, 4996.4], "frames": 55, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.339}, {"id": 48, "box": [76.8, 1603.1, 100.3, 1795.6], "frames": 54, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.37}, {"id": 76, "box": [21.3, 2548.8, 85.2, 2592.7], "frames": 53, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.433}, {"id": 175, "box": [263.4, 5469.6, 344.9, 5595.9], "frames": 53, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.549}, {"id": 9, "box": [153.4, 405.6, 177.8, 579.1], "frames": 52, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.242}, {"id": 91, "box": [221.1, 2904.0, 325.6, 2995.4], "frames": 52, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.689}, {"id": 113, "box": [53.8, 3605.0, 103.8, 3680.9], "frames": 52, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.585}, {"id": 153, "box": [248.0, 4807.1, 274.6, 4998.9], "frames": 52, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.285}, {"id": 166, "box": [141.8, 5230.3, 183.2, 5312.5], "frames": 52, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.569}, {"id": 14, "box": [250.3, 601.8, 275.3, 661.2], "frames": 51, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.323}, {"id": 75, "box": [413.7, 2487.8, 599.7, 2519.0], "frames": 51, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.338}, {"id": 84, "box": [5.1, 2598.6, 38.0, 2883.0], "frames": 51, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.213}, {"id": 87, "box": [247.9, 2800.8, 306.3, 2874.7], "frames": 51, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.822}, {"id": 107, "box": [434.6, 3519.6, 530.4, 3607.6], "frames": 51, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.202}, {"id": 167, "box": [13.9, 5269.1, 84.1, 5349.5], "frames": 51, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.744}, {"id": 125, "box": [29.2, 4023.5, 199.6, 4171.2], "frames": 50, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.185}, {"id": 172, "box": [195.2, 5426.7, 234.5, 5580.1], "frames": 50, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.369}, {"id": 1, "box": [124.5, 279.6, 186.9, 399.1], "frames": 49, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.611}, {"id": 54, "box": [403.8, 1853.4, 443.5, 1945.6], "frames": 49, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.422}, {"id": 63, "box": [1.0, 2080.2, 202.7, 2197.2], "frames": 49, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.247}, {"id": 64, "box": [249.5, 2202.5, 297.4, 2266.8], "frames": 49, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.402}, {"id": 110, "box": [525.6, 3593.1, 595.5, 3648.1], "frames": 49, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.359}, {"id": 132, "box": [143.8, 4312.9, 189.4, 4396.9], "frames": 49, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.36}, {"id": 18, "box": [494.1, 639.5, 520.6, 704.2], "frames": 48, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.596}, {"id": 47, "box": [310.8, 1603.4, 341.0, 1675.3], "frames": 48, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.425}, {"id": 97, "box": [413.3, 3031.8, 500.9, 3121.6], "frames": 48, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.433}, {"id": 143, "box": [200.9, 4601.0, 391.7, 4797.8], "frames": 48, "det_label": "pitted_surface", "final": "pitted_surface", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "pitted_surface", "mean_conf": 0.301}, {"id": 27, "box": [159.9, 806.1, 195.7, 886.4], "frames": 47, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.3}, {"id": 29, "box": [135.5, 932.4, 197.1, 998.9], "frames": 47, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.362}, {"id": 49, "box": [524.4, 1634.8, 600.0, 1794.9], "frames": 47, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.258}, {"id": 32, "box": [407.5, 1078.4, 598.6, 1116.8], "frames": 46, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.793}, {"id": 145, "box": [442.8, 4741.4, 499.6, 4801.3], "frames": 46, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.27}, {"id": 178, "box": [0.5, 5601.5, 92.1, 5680.5], "frames": 46, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.787}, {"id": 3, "box": [61.3, 292.1, 113.6, 369.8], "frames": 45, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.553}, {"id": 57, "box": [576.0, 1915.6, 599.7, 1999.7], "frames": 45, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.18}, {"id": 141, "box": [447.5, 4604.6, 482.2, 4670.4], "frames": 45, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.317}, {"id": 92, "box": [415.6, 2900.8, 449.2, 2989.3], "frames": 43, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.246}, {"id": 162, "box": [562.7, 5066.7, 599.5, 5194.2], "frames": 43, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.287}, {"id": 6, "box": [55.2, 201.1, 162.0, 270.1], "frames": 42, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.334}, {"id": 121, "box": [535.7, 3809.4, 582.1, 3998.1], "frames": 42, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.173}, {"id": 184, "box": [98.3, 5679.1, 159.0, 5771.8], "frames": 40, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.582}, {"id": 50, "box": [299.9, 1742.0, 330.9, 1797.2], "frames": 39, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.26}, {"id": 96, "box": [242.1, 3008.4, 339.4, 3106.3], "frames": 38, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.16}, {"id": 181, "box": [403.0, 5698.2, 467.9, 5796.4], "frames": 37, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.586}, {"id": 11, "box": [401.2, 402.5, 599.7, 594.2], "frames": 36, "det_label": "pitted_surface", "final": "pitted_surface", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "pitted_surface", "mean_conf": 0.252}, {"id": 59, "box": [0.0, 2000.8, 379.6, 2134.7], "frames": 36, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.139}, {"id": 90, "box": [61.5, 2806.2, 84.3, 2926.7], "frames": 36, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.203}, {"id": 4, "box": [310.1, 262.7, 339.4, 359.8], "frames": 35, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.442}, {"id": 136, "box": [0.4, 4379.3, 170.5, 4483.6], "frames": 35, "det_label": "crazing", "final": "crazing", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.155}, {"id": 164, "box": [428.6, 5009.2, 494.1, 5196.2], "frames": 34, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.501}, {"id": 170, "box": [164.2, 5361.1, 199.4, 5399.4], "frames": 33, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.145}, {"id": 81, "box": [137.6, 2649.1, 196.5, 2722.7], "frames": 32, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.174}, {"id": 130, "box": [341.1, 4203.3, 396.4, 4396.5], "frames": 32, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.176}, {"id": 139, "box": [1.4, 4527.5, 189.8, 4663.3], "frames": 30, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.123}, {"id": 186, "box": [48.1, 5739.6, 95.5, 5799.5], "frames": 27, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 3, "gt": "patches", "mean_conf": 0.237}, {"id": 190, "box": [331.1, 5802.0, 392.1, 5894.9], "frames": 26, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.526}, {"id": 15, "box": [207.1, 600.6, 234.0, 661.5], "frames": 25, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.163}, {"id": 38, "box": [1.3, 1200.5, 178.0, 1287.0], "frames": 23, "det_label": "crazing", "final": "crazing", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.147}, {"id": 119, "box": [13.9, 3792.0, 191.2, 3875.0], "frames": 23, "det_label": "crazing", "final": "crazing", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.156}, {"id": 17, "box": [203.4, 413.4, 390.9, 596.8], "frames": 22, "det_label": "pitted_surface", "final": "pitted_surface", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "pitted_surface", "mean_conf": 0.156}, {"id": 28, "box": [0.4, 802.8, 156.7, 996.1], "frames": 21, "det_label": "pitted_surface", "final": "pitted_surface", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "pitted_surface", "mean_conf": 0.137}, {"id": 58, "box": [69.3, 1801.3, 154.3, 1882.8], "frames": 20, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.144}, {"id": 103, "box": [441.5, 3396.6, 568.2, 3467.6], "frames": 20, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.123}, {"id": 174, "box": [258.1, 5466.7, 300.4, 5589.1], "frames": 20, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.252}, {"id": 122, "box": [487.4, 3845.1, 524.6, 3947.3], "frames": 19, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.164}, {"id": 146, "box": [0.0, 4662.1, 173.0, 4771.7], "frames": 19, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.155}, {"id": 2, "box": [477.5, 49.3, 539.1, 179.2], "frames": 18, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.296}, {"id": 21, "box": [12.0, 418.9, 55.9, 594.2], "frames": 23, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.176}, {"id": 191, "box": [130.6, 5799.7, 178.0, 5934.4], "frames": 17, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": false, "vlm_calls": 0, "gt": "scratches", "mean_conf": 0.353}, {"id": 5, "box": [229.9, 61.2, 284.3, 193.7], "frames": 15, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.37}, {"id": 93, "box": [6.0, 2681.2, 35.1, 2797.5], "frames": 15, "det_label": "scratches", "final": "patches", "severity": "low", "consensus": false, "vlm_calls": 1, "gt": "scratches", "mean_conf": 0.173}, {"id": 19, "box": [220.7, 601.0, 273.6, 775.8], "frames": 14, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.143}, {"id": 156, "box": [468.6, 4821.2, 519.1, 4964.0], "frames": 14, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.122}, {"id": 62, "box": [410.0, 1999.9, 599.6, 2196.5], "frames": 13, "det_label": "pitted_surface", "final": "pitted_surface", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "pitted_surface", "mean_conf": 0.164}, {"id": 194, "box": [420.7, 5805.1, 465.2, 5894.6], "frames": 13, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.358}, {"id": 195, "box": [206.5, 5873.9, 265.7, 5949.6], "frames": 13, "det_label": "patches", "final": "patches", "severity": "low", "consensus": false, "vlm_calls": 1, "gt": "patches", "mean_conf": 0.606}, {"id": 68, "box": [303.7, 2304.1, 383.8, 2386.5], "frames": 12, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.151}, {"id": 192, "box": [63.9, 5803.1, 88.8, 5955.9], "frames": 12, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": "scratches", "mean_conf": 0.227}, {"id": 10, "box": [474.8, 125.9, 551.2, 185.2], "frames": 11, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.163}, {"id": 37, "box": [457.3, 920.0, 514.8, 997.9], "frames": 9, "det_label": "scratches", "final": "scratches", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": null, "mean_conf": 0.401}, {"id": 128, "box": [29.8, 4010.1, 369.7, 4099.6], "frames": 9, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.131}, {"id": 7, "box": [410.7, 203.6, 599.4, 394.3], "frames": 8, "det_label": "pitted_surface", "final": "pitted_surface", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "pitted_surface", "mean_conf": 0.145}, {"id": 123, "box": [12.4, 3950.8, 200.4, 4066.8], "frames": 8, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.153}, {"id": 169, "box": [212.1, 5254.7, 387.9, 5381.8], "frames": 8, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.146}, {"id": 171, "box": [211.3, 5150.6, 278.6, 5199.8], "frames": 8, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.247}, {"id": 108, "box": [0.8, 3402.1, 193.6, 3600.0], "frames": 7, "det_label": "pitted_surface", "final": "pitted_surface", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "pitted_surface", "mean_conf": 0.135}, {"id": 0, "box": [0.2, 25.0, 193.7, 68.1], "frames": 6, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": false, "vlm_calls": 1, "gt": "scratches", "mean_conf": 0.557}, {"id": 61, "box": [208.9, 2021.0, 386.4, 2125.1], "frames": 9, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 3, "gt": "crazing", "mean_conf": 0.119}, {"id": 161, "box": [370.1, 5063.7, 399.9, 5130.2], "frames": 6, "det_label": "patches", "final": "patches", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": "patches", "mean_conf": 0.286}, {"id": 120, "box": [128.5, 3606.0, 182.5, 3687.8], "frames": 5, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.136}, {"id": 138, "box": [0.0, 4368.4, 52.4, 4401.4], "frames": 8, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 3, "gt": "patches", "mean_conf": 0.14}, {"id": 149, "box": [452.7, 4813.2, 497.9, 4882.8], "frames": 5, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": "inclusion", "mean_conf": 0.2}, {"id": 187, "box": [331.6, 5670.3, 367.6, 5795.3], "frames": 5, "det_label": "inclusion", "final": "inclusion", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.136}, {"id": 60, "box": [5.1, 1992.4, 210.2, 2097.8], "frames": 4, "det_label": "crazing", "final": "crazing", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.132}, {"id": 80, "box": [0.0, 2602.7, 19.8, 2712.7], "frames": 4, "det_label": "patches", "final": "patches", "severity": "low", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.135}, {"id": 134, "box": [400.5, 4401.1, 478.8, 4471.0], "frames": 4, "det_label": "patches", "final": "patches", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": null, "mean_conf": 0.18}, {"id": 152, "box": [399.0, 4548.3, 550.8, 4599.7], "frames": 4, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": false, "vlm_calls": 0, "gt": "crazing", "mean_conf": 0.266}, {"id": 159, "box": [140.4, 5001.9, 195.6, 5090.3], "frames": 4, "det_label": "patches", "final": "patches", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": null, "mean_conf": 0.237}, {"id": 193, "box": [581.9, 5517.7, 599.9, 5609.7], "frames": 4, "det_label": "patches", "final": "patches", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": null, "mean_conf": 0.133}, {"id": 30, "box": [1.0, 606.9, 157.0, 686.2], "frames": 3, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": false, "vlm_calls": 1, "gt": null, "mean_conf": 0.118}, {"id": 83, "box": [211.6, 2378.5, 301.3, 2422.7], "frames": 3, "det_label": "patches", "final": "patches", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": null, "mean_conf": 0.462}, {"id": 106, "box": [201.9, 3508.0, 263.9, 3574.1], "frames": 3, "det_label": "patches", "final": "patches", "severity": "low", "consensus": false, "vlm_calls": 0, "gt": "patches", "mean_conf": 0.178}], "strip_px": [600, 6000], "labels_es": {"crazing": "Grietas", "inclusion": "Inclusión", "patches": "Manchas", "pitted_surface": "Picaduras", "rolled-in_scale": "Cascarilla laminada", "scratches": "Arañazos", "ok": "Sin defecto"}};
+const $ = (id) => document.getElementById(id);
+const M = R.metrics, ES = R.labels_es;
+const pct = (v) => v == null ? "–" : Math.round(v * 100) + " %";
+const n = (v) => v.toLocaleString("es-ES");
+if (M.backend !== "ollama") { $("banner").hidden = false;
+  $("banner").innerHTML = "<b>Vista previa sin VLM.</b> Estos resultados usan el detector en las tres etapas para probar el pipeline. La versión publicada usa el VLM local."; }
+$("k-save").textContent = Math.round(M.vlm_saving_pct) + " %";
+$("k-save-d").textContent = `${n(M.vlm_calls)} llamadas en lugar de ${n(M.vlm_calls_if_every_frame)}`;
+$("k-rec").textContent = pct(M.recall);
+$("k-rec-d").textContent = `${M.gt_found} de ${M.gt_defects} defectos etiquetados`;
+$("k-acc").textContent = pct(M.class_acc_cascade);
+$("k-acc-d").textContent = `solo detector: ${pct(M.class_acc_detector)}`;
+$("k-ms").textContent = Math.round(M.ms_det_per_frame) + " ms";
+$("st1").innerHTML = `${n(M.frames)} <small>fotogramas analizados</small>`;
+$("st2").innerHTML = `${n(M.vlm_calls)} <small>llamadas · ${pct(M.consensus_rate)} con consenso${M.fp_suppressed_by_vlm ? " · " + M.fp_suppressed_by_vlm + " falsos positivos descartados" : ""}</small>`;
+const dec = R.sections.reduce((a, s) => (a[s.decision] = (a[s.decision] || 0) + 1, a), {});
+$("st3").innerHTML = `${R.sections.length} <small>tramos · ${dec.OK || 0} OK · ${dec.REVISAR || 0} revisar · ${dec.RECHAZAR || 0} rechazar</small>`;
+
+$("strip").src = "img/strip_overview_h.jpg";
+$("secs").innerHTML = R.sections.map((s) => `<div class="d-${s.decision}" title="Tramo ${s.section}: ${s.defects} defectos">${s.section}</div>`).join("");
+$("sec-sub").textContent = `${R.sections.length} tramos de banda inspeccionados.`;
+
+function smooth(a, w) { return a.map((_, i) => { const s = a.slice(Math.max(0, i - w + 1), i + 1); return s.reduce((x, y) => x + y, 0) / s.length; }); }
+function draw() {
+  const tl = R.timeline;
+  Viz.line($("tl"), { x: tl.map((t) => t[0]), height: 280, xLabel: "Fotograma", yMin: 0, xTip: (v) => "Fotograma " + v,
+    yTip: (v) => v.toLocaleString("es-ES", { maximumFractionDigits: 2 }),
+    series: [{ name: "Detecciones YOLO", values: smooth(tl.map((t) => t[1]), 10), color: "#3987e5", fill: true },
+             { name: "Llamadas al VLM", values: smooth(tl.map((t) => t[2]), 10), color: "#9085e9" }] });
+  Viz.bars($("dec"), { fmt: (v) => v, items: [
+    { label: "OK", value: dec.OK || 0, color: "#199e70" },
+    { label: "Revisar", value: dec.REVISAR || 0, color: "#c98500" },
+    { label: "Rechazar", value: dec.RECHAZAR || 0, color: "#d03b3b" }] });
+}
+draw();
+addEventListener("resize", () => { clearTimeout(window._rt); window._rt = setTimeout(draw, 150); });
+$("crops").innerHTML = R.examples.map((e) => `<div class="crop"><img src="img/${e.img}" alt="${ES[e.final] || e.final}" loading="lazy">
+  <div><b>${ES[e.final] || e.final}</b>Referencia: ${e.gt ? ES[e.gt] : "—"}<br>${e.vlm_calls} llamadas · visto en ${e.frames} fotogramas
+  ${e.reason && M.backend === "ollama" ? `<div class="r">«${e.reason}»</div>` : ""}</div></div>`).join("");
+
+const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .1 });
+document.querySelectorAll(".reveal").forEach((e) => io.observe(e));
+
+// Hero background: a strip moving under a scan line
+(function () {
+  const c = $("bg"), x = c.getContext("2d"); let w, h, t = 0;
+  const fit = () => { w = c.width = c.offsetWidth * devicePixelRatio; h = c.height = c.offsetHeight * devicePixelRatio; };
+  fit(); addEventListener("resize", fit);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const spots = Array.from({ length: 40 }, () => ({ x: Math.random(), y: Math.random(), r: 2 + Math.random() * 10 }));
+  (function d() {
+    x.clearRect(0, 0, w, h);
+    const sx = w * 0.72;
+    spots.forEach((s) => {
+      const px = ((s.x - t) % 1 + 1) % 1 * w, py = s.y * h;
+      const near = Math.abs(px - sx) < 40 * devicePixelRatio;
+      x.strokeStyle = near ? "rgba(144,133,233,.9)" : "rgba(144,133,233,.18)"; x.lineWidth = devicePixelRatio;
+      x.strokeRect(px - s.r * devicePixelRatio, py - s.r * devicePixelRatio, 2 * s.r * devicePixelRatio, 2 * s.r * devicePixelRatio);
+    });
+    x.fillStyle = "rgba(144,133,233,.35)"; x.fillRect(sx, 0, 2 * devicePixelRatio, h);
+    t += 0.0008; if (!reduce) requestAnimationFrame(d);
+  })();
+})();
+</script>
+</body>
+</html>
