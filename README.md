@@ -1,42 +1,42 @@
-# Inspección de defectos en cascada: detector + VLM local
+# Cascaded defect inspection: detector + local VLM
 
-**Dashboard interactivo:** https://alvaromcib.github.io/inspeccion-defectos-cascada/
+**Interactive dashboard:** [English](https://alvaromcib.github.io/inspeccion-defectos-cascada/en/) · [Español](https://alvaromcib.github.io/inspeccion-defectos-cascada/)
 
-Inspección visual de una banda de acero laminado en caliente con una **cascada de modelos**:
+Visual inspection of a hot-rolled steel strip with a **cascade of models**:
 
-1. **Detector YOLO11n en cada fotograma.** Es barato, ~20 ms en CPU. Localiza posibles defectos y los asocia entre fotogramas con la posición de la banda (en planta, el encoder de la línea).
-2. **Modelo de visión-lenguaje (VLM) local solo en unos pocos recortes por defecto.** Clasifica tipo y severidad y explica su decisión. Se le pregunta hasta que **dos respuestas coinciden** (como máximo 4 veces), así que no hay que pasar cada fotograma por un modelo grande.
-3. **Informe por tramo:** defectos, tipos y severidad, y la decisión **OK / REVISAR / RECHAZAR**.
+1. **YOLO11n detector on every frame.** It is cheap, ~20 ms on CPU. It localises candidate defects and links them across frames using the strip position (on a real line, the line encoder).
+2. **A local vision-language model (VLM) on only a few crops per defect.** It classifies type and severity and explains its decision. It is asked until **two answers agree** (at most 4 times), so there is no need to run every frame through a large model.
+3. **Per-section report:** defects, types and severity, and an **OK / REVIEW / REJECT** decision.
 
-El VLM se ejecuta con **Ollama en local**: las imágenes de planta no salen de la fábrica y no hay coste por llamada.
+The VLM runs **locally with Ollama**: plant images never leave the factory and there is no per-call cost.
 
-Proyecto demostrativo con el dataset público NEU-DET (defectos superficiales de banda laminada en caliente). No usa datos de clientes.
+Demo project built on the public NEU-DET dataset (surface defects of hot-rolled steel strip). No client data is used.
 
-## Resultados
+## Results
 
-Ver `results/results.json` y el dashboard: llamadas al VLM evitadas frente a analizar cada fotograma, defectos localizados, precisión del tipo de defecto (detector frente a cascada) y decisiones por tramo.
+See `results/results.json` and the dashboard: VLM calls avoided compared with analysing every frame, defects localised, defect-type accuracy (detector vs cascade) and per-section decisions.
 
-## Ejecutarlo
+## How to run it
 
 ```bash
 pip install -r requirements.txt
-python src/get_data.py              # 1) descarga NEU-DET y lo convierte a YOLO (datasets/neu)
-                                    # 2) detector ya entrenado: models/neu_yolo11n.pt
-ollama pull qwen2.5vl:7b            # 3) VLM local (o qwen2.5vl:3b si el equipo va justo)
-python src/pipeline.py --backend ollama --rows 12   # 4) cascada completa
-python src/build_dashboard.py       # 5) regenera el dashboard con los resultados del VLM
+python src/get_data.py              # 1) downloads NEU-DET and converts it to YOLO format (datasets/neu)
+                                    # 2) detector already trained: models/neu_yolo11n.pt
+ollama pull qwen2.5vl:7b            # 3) local VLM (or qwen2.5vl:3b on a smaller machine)
+python src/pipeline.py --backend ollama --rows 12   # 4) full cascade
+python src/build_dashboard.py       # 5) rebuilds docs/ (ES) and docs/en/ (EN) with the VLM results
 ```
 
-`--backend detector` ejecuta el pipeline sin VLM, para probar la integración. Con `OLLAMA_VLM` se cambia el modelo.
+`--backend detector` runs the pipeline without the VLM, to test the integration. `OLLAMA_VLM` changes the model. The VLM prompt is in Spanish, so its short explanations are in Spanish.
 
-## Cómo se aplicaría en una línea real
+## How it would apply on a real line
 
-- Cámara de línea o matricial sobre la banda o la pieza, sincronizada con el encoder.
-- Detector entrenado con defectos propios. El VLM aporta la descripción y la segunda opinión sin reentrenar para cada tipo nuevo.
-- Integración con MES/calidad: informe por bobina o lote y trazabilidad de cada defecto con su imagen.
+- A line-scan or area camera over the strip or part, synchronised with the encoder.
+- A detector trained on the plant's own defects. The VLM adds the description and a second opinion without retraining for every new defect type.
+- Integration with MES/quality systems: a report per coil or batch and traceability of each defect with its image.
 
 ---
 
-**Álvaro Martín Coll** · Físico · Ingeniero de IA para industria y energía · [Perfil en Malt](https://www.malt.com/profile/alvaromartincoll)
+**Álvaro Martín Coll** · Physicist · AI engineer for industry and energy · [Malt profile](https://www.malt.com/profile/alvaromartincoll)
 
-Datos: K. Song, Y. Yan, NEU surface defect database, Northeastern University (uso de investigación).
+Data: K. Song, Y. Yan, NEU surface defect database, Northeastern University (research use).
