@@ -91,20 +91,24 @@ def run(weights, data, backend, out_dir, view_h=400, step=8, conf=0.1, rows=30):
             continue
         bx = np.median(np.array(tr["boxes"]), axis=0).tolist()
         det_label = Counter(tr["det"]).most_common(1)[0][0]
+        # Fusion rule: the detector decides the defect TYPE (95.7% vs 51.1% when a 3B VLM decided it,
+        # see results/cascade_ollama.json); the VLM adds severity and an explanation, and can veto a
+        # detection by agreeing that the crop has no defect ("ok").
         if tr["queries"]:
-            final, n = Counter(q["label"] for q in tr["queries"]).most_common(1)[0]
-            sev = Counter(q["severity"] for q in tr["queries"] if q["label"] == final).most_common(1)
+            vlm_label, n = Counter(q["label"] for q in tr["queries"]).most_common(1)[0]
+            sev = Counter(q["severity"] for q in tr["queries"] if q["label"] == vlm_label).most_common(1)
             sev = sev[0][0] if sev else "medium"
             consensus = n >= AGREE
+            final = "ok" if (vlm_label == "ok" and consensus) else det_label
         else:
-            final, consensus, sev = det_label, False, "medium"
+            vlm_label, final, consensus, sev = None, det_label, False, "medium"
         if backend != "ollama":
             sev = severity_proxy(bx)
         # ground truth match
         best = max(s.boxes, key=lambda g: iou(bx, g[:4]))
         gt = best[4] if iou(bx, best[:4]) > 0.3 else None
         defects.append({"id": tid, "box": [round(v, 1) for v in bx], "frames": len(tr["boxes"]),
-                        "det_label": det_label, "final": final, "severity": sev, "consensus": consensus,
+                        "det_label": det_label, "vlm_label": vlm_label, "final": final, "severity": sev, "consensus": consensus,
                         "vlm_calls": len(tr["queries"]), "answers": tr["queries"], "gt": gt,
                         "mean_conf": round(float(np.mean(tr["conf"])), 3)})
 
@@ -120,6 +124,7 @@ def run(weights, data, backend, out_dir, view_h=400, step=8, conf=0.1, rows=30):
     defects = merged
 
     # ---- metrics ----
+    calls_total = int(sum(t[2] for t in timeline))
     gt_boxes = s.boxes
     matched_gt = set()
     for d in defects:
@@ -133,7 +138,10 @@ def run(weights, data, backend, out_dir, view_h=400, step=8, conf=0.1, rows=30):
         "precision": round(len(real) / max(len(defects), 1), 3),
         "class_acc_detector": round(np.mean([d["det_label"] == d["gt"] for d in real]), 3) if real else None,
         "class_acc_cascade": round(np.mean([d["final"] == d["gt"] for d in real]), 3) if real else None,
-        "vlm_calls": int(sum(d["vlm_calls"] for d in defects)),
+        "class_acc_vlm_type": (round(np.mean([d["vlm_label"] == d["gt"] for d in real if d["vlm_label"]]), 3)
+                               if any(d["vlm_label"] for d in real) else None),
+        "fusion": "detector_type+vlm_severity_veto",
+        "vlm_calls": calls_total,                     # every call made, incl. tracks later discarded as flicker
         "vlm_calls_if_every_frame": int(sum(d["frames"] for d in defects)),
         "consensus_rate": round(np.mean([d["consensus"] for d in defects]), 3) if defects else None,
         "fp_suppressed_by_vlm": sum(1 for d in defects if d["final"] == "ok"),
@@ -170,12 +178,12 @@ def run(weights, data, backend, out_dir, view_h=400, step=8, conf=0.1, rows=30):
         crop = Image.fromarray(s.image[max(0, y1 - 8):y2 + 8, max(0, x1 - 8):x2 + 8]).convert("RGB").resize((160, 160))
         name = f"crop_{d['id']}.jpg"
         crop.save(out_dir / name, quality=85)
-        ex.append({"img": name, **{k: d[k] for k in ("final", "det_label", "gt", "severity", "vlm_calls", "frames", "consensus")},
+        ex.append({"img": name, **{k: d[k] for k in ("final", "det_label", "vlm_label", "gt", "severity", "vlm_calls", "frames", "consensus")},
                    "reason": d["answers"][-1]["reason"] if d["answers"] else ""})
     res = {"metrics": m, "sections": sections, "examples": ex, "timeline": timeline,
            "defects": [{k: v for k, v in d.items() if k != "answers"} for d in defects],
            "strip_px": [int(s.image.shape[1]), int(s.image.shape[0])], "labels_es": ES}
-    (out_dir / f"cascade_{backend}.json").write_text(json.dumps(res, ensure_ascii=False))
+    (out_dir / f"cascade_{backend}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(m, indent=2))
     return res
 

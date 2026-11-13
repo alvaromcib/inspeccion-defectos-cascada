@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base href="../">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cascaded defect inspection: detector + VLM · Álvaro Martín Coll</title>
+<style>:root {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --text-1: #f0efec;
+  --text-2: #c3c2b7;
+  --text-3: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --ring: rgba(255,255,255,0.10);
+  --s1: #3987e5;  /* blue */
+  --s2: #d95926;  /* orange */
+  --s3: #199e70;  /* aqua */
+  --good: #0ca30c;
+  --warn: #fab219;
+  --crit: #d03b3b;
+  --accent: var(--s1);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-1); line-height: 1.5; }
+a { color: var(--accent); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
+
+/* Hero */
+.hero { position: relative; overflow: hidden; padding: 56px 0 40px; border-bottom: 1px solid var(--grid); margin-bottom: 32px; }
+.hero::before { content: ""; position: absolute; inset: -40% -10% auto auto; width: 720px; height: 720px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  pointer-events: none; }
+.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
+.hero .wrap { position: relative; padding-bottom: 0; }
+.eyebrow { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.08; margin: 10px 0 14px; letter-spacing: -.02em; max-width: 900px; }
+.lede { font-size: 18px; color: var(--text-2); max-width: 760px; margin: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.tag { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--ring); color: var(--text-2); background: var(--surface); }
+
+/* KPI tiles */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 0 0 28px; }
+.kpi { background: var(--surface); border: 1px solid var(--ring); border-radius: 14px; padding: 18px 20px; }
+.kpi .l { font-size: 13px; color: var(--text-2); }
+.kpi .v { font-size: 34px; font-weight: 650; letter-spacing: -.02em; margin-top: 4px; }
+.kpi .d { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+.kpi.hero-kpi { background: linear-gradient(140deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), var(--surface)); }
+.kpi.hero-kpi .v { font-size: 52px; }
+
+/* Cards */
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 14px; padding: 20px; grid-column: span 12; min-width: 0; }
+.span-6 { grid-column: span 6; } .span-4 { grid-column: span 4; } .span-8 { grid-column: span 8; }
+@media (max-width: 860px) { .span-6, .span-4, .span-8 { grid-column: span 12; } }
+.card h2 { font-size: 17px; margin: 0 0 2px; }
+.card .sub { font-size: 13px; color: var(--text-3); margin: 0 0 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--text-2); margin: -4px 0 8px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.chip { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--ring);
+  background: var(--surface-2); color: var(--text-2); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Story / method */
+.steps { counter-reset: s; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.step { background: var(--surface-2); border-radius: 12px; padding: 16px; font-size: 14px; color: var(--text-2); }
+.step b { display: block; color: var(--text-1); margin-bottom: 4px; }
+.step::before { counter-increment: s; content: counter(s, decimal-leading-zero); font-size: 12px; color: var(--accent); font-weight: 700; }
+.note { font-size: 13px; color: var(--text-3); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); }
+th { color: var(--text-3); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; }
+.footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--grid); display: flex; flex-wrap: wrap;
+  gap: 12px 24px; justify-content: space-between; font-size: 14px; color: var(--text-2); }
+.cta { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; padding: 10px 18px;
+  border-radius: 10px; font-weight: 600; }
+
+/* Viz */
+.viz-tick { fill: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.viz-label { fill: var(--text-3); font-size: 12px; }
+.viz-tip { position: fixed; z-index: 10; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: #0b0b0b; border: 1px solid var(--ring); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  color: var(--text-1); box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+.viz-tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.viz-bar { display: grid; grid-template-columns: 120px 1fr 96px; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; }
+.viz-bar-l { color: var(--text-2); }
+.viz-bar-t { height: 14px; }
+.viz-bar-f { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+.viz-bar-v { color: var(--text-1); font-variant-numeric: tabular-nums; text-align: right; }
+.cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px; font-size: 13px; }
+.cm div { padding: 14px; border-radius: 8px; text-align: center; background: var(--surface-2); }
+.cm .h { background: none; color: var(--text-3); padding: 6px; }
+.cm .ok { background: color-mix(in srgb, var(--good) 28%, var(--surface)); }
+.cm .bad { background: color-mix(in srgb, var(--crit) 24%, var(--surface)); }
+.cm b { display: block; font-size: 24px; }
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s, transform .6s; }
+.reveal.in { opacity: 1; transform: none; }
+
+/* Language switch */
+.lang { position: fixed; top: 14px; right: 16px; z-index: 15; display: flex; gap: 2px; padding: 3px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent); border: 1px solid var(--ring); border-radius: 999px;
+  backdrop-filter: blur(6px); font-size: 12px; font-weight: 600; letter-spacing: .04em; }
+.lang a { color: var(--text-3); text-decoration: none; padding: 4px 10px; border-radius: 999px; }
+.lang a:hover { color: var(--text-1); }
+.lang a[aria-current="page"] { background: var(--accent); color: #fff; }
+</style>
+<style>
+:root { --accent: #6250d6; --s4: #9085e9; }
+.flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 10px; align-items: stretch; }
+@media (max-width: 860px) { .flow { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); justify-self: center; } }
+.stage { background: var(--surface-2); border-radius: 14px; padding: 18px; border: 1px solid var(--ring); }
+.stage .n { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.stage h3 { margin: 6px 0 6px; font-size: 18px; }
+.stage p { margin: 0; font-size: 14px; color: var(--text-2); }
+.stage .m { margin-top: 12px; font-size: 26px; font-weight: 650; }
+.stage .m small { font-size: 13px; color: var(--text-3); font-weight: 400; display: block; }
+.arrow { align-self: center; color: var(--text-3); font-size: 26px; }
+.band { position: relative; overflow-x: auto; border-radius: 10px; background: #000; }
+.band img { display: block; height: 220px; width: auto; max-width: none; }
+.secs { display: flex; gap: 2px; margin-top: 8px; min-width: 100%; }
+.secs div { flex: 1; height: 26px; border-radius: 4px; font-size: 11px; display: flex; align-items: center; justify-content: center; color: #fff; cursor: default; }
+.d-OK { background: #1f3b2a; color: var(--text-2) !important; }
+.d-REVISAR { background: #c98500; color: #0b0b0b !important; }
+.d-RECHAZAR { background: #d03b3b; }
+.crops { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.crop { background: var(--surface-2); border-radius: 12px; overflow: hidden; font-size: 12px; }
+.crop img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; filter: contrast(1.1); }
+.crop div { padding: 8px 10px; }
+.crop b { display: block; font-size: 13px; }
+.crop .r { color: var(--text-3); margin-top: 4px; }
+.banner { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent); border-radius: 12px; padding: 12px 16px; font-size: 14px; margin-bottom: 20px; }
+.legend-sq i { width: 12px; height: 12px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<nav class="lang" aria-label="Idioma / Language"><a href="./" hreflang="es">ES</a><a href="en/" hreflang="en" aria-current="page">EN</a></nav>
+<header class="hero">
+  <canvas id="bg"></canvas>
+  <div class="wrap">
+    <div class="eyebrow">Demo case · Industrial visual inspection</div>
+    <h1>A cheap detector on every frame, a vision-language model only when it's needed</h1>
+    <p class="lede">Defect inspection on a hot-rolled steel strip with a cascade: YOLO localises in real time,
+      a local VLM reviews a few crops of each defect to grade its severity and explain it, and the system decides per section: OK, review or reject.</p>
+    <div class="tags"><span class="tag">YOLO11</span><span class="tag">Local VLM (Ollama)</span><span class="tag">Consensus</span><span class="tag">Steel industry</span><span class="tag">Public data</span></div>
+  </div>
+</header>
+<main class="wrap">
+  <div class="banner" id="banner" hidden></div>
+  <section class="kpis reveal">
+    <div class="kpi hero-kpi"><div class="l">VLM calls avoided</div><div class="v" id="k-save"></div><div class="d" id="k-save-d"></div></div>
+    <div class="kpi"><div class="l">Real defects localised</div><div class="v" id="k-rec"></div><div class="d" id="k-rec-d"></div></div>
+    <div class="kpi"><div class="l">Correct defect type</div><div class="v" id="k-acc"></div><div class="d" id="k-acc-d"></div></div>
+    <div class="kpi"><div class="l">Detector per frame (CPU)</div><div class="v" id="k-ms"></div><div class="d">no GPU</div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card reveal">
+      <h2>The cascade</h2>
+      <p class="sub">Each stage does only its own job. The expensive model sees a tiny fraction of the images.</p>
+      <div class="flow">
+        <div class="stage"><div class="n" style="color:var(--s1)">Stage 1 · every frame</div><h3>YOLO11n detector</h3><p>Localises candidate defects and links them across frames using the strip position.</p><div class="m" id="st1"></div></div>
+        <div class="arrow">→</div>
+        <div class="stage"><div class="n" style="color:var(--s4)">Stage 2 · a few crops</div><h3>Local VLM</h3><p>Grades severity, explains the defect and can discard false positives. It is asked until two answers agree (max. 4 per defect). The detector decides the type.</p><div class="m" id="st2"></div></div>
+        <div class="arrow">→</div>
+        <div class="stage"><div class="n" style="color:var(--s3)">Stage 3 · per section</div><h3>Report and decision</h3><p>Defects, types and severity per strip section: OK, review or reject.</p><div class="m" id="st3"></div></div>
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <h2>The inspected strip</h2>
+      <p class="sub">Validation images the detector never saw, stitched into a continuous strip. NEU-DET only contains images with defects, so almost every section has findings. Boxes: green low severity · amber medium · orange high. Scroll horizontally.</p>
+      <div class="band" id="band"><img id="strip" alt="Steel strip with marked defects"></div>
+      <div class="secs" id="secs"></div>
+      <div class="legend legend-sq" style="margin-top:10px"><span><i style="background:#1f3b2a"></i>OK</span><span><i style="background:#c98500"></i>Review</span><span><i style="background:#d03b3b"></i>Reject</span></div>
+    </div>
+
+    <div class="card span-8 reveal">
+      <h2>Work per frame</h2>
+      <p class="sub">Lightweight-model detections versus VLM calls over the inspection (10-frame moving average).</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>YOLO detections</span><span><i style="background:var(--s4)"></i>VLM calls</span></div>
+      <div id="tl"></div>
+    </div>
+    <div class="card span-4 reveal">
+      <h2>Decision per section</h2>
+      <p class="sub" id="sec-sub"></p>
+      <div id="dec"></div>
+    </div>
+
+    <div class="card reveal">
+      <h2>Defects and what the model said</h2>
+      <p class="sub">Crops of the most persistent defects: final type (detector), reference, what the VLM answered and its explanation.</p>
+      <div class="crops" id="crops"></div>
+    </div>
+
+    <div class="card reveal">
+      <h2>What didn't work: the VLM deciding the type</h2>
+      <p class="sub">The first version let the VLM choose the defect type. With a 3B model on CPU, it did worse than the detector.</p>
+      <div class="grid" style="margin-top:6px">
+        <div class="span-6"><div id="lesson"></div></div>
+        <div class="span-6"><p class="note" id="lesson-t" style="font-size:14px;line-height:1.6;margin:0"></p></div>
+      </div>
+    </div>
+    <div class="card reveal">
+      <h2>Why a cascade</h2>
+      <div class="steps">
+        <div class="step"><b>Cost</b>A VLM on every frame is expensive and slow. Here it only sees a few crops per defect.</div>
+        <div class="step"><b>Reliability</b>Consensus filters out erratic answers but can't fix a bias: so the type is decided by the model trained for it, and the VLM adds what the detector can't provide.</div>
+        <div class="step"><b>Privacy</b>The VLM runs locally with Ollama: plant images never leave the factory.</div>
+        <div class="step"><b>Explainable</b>Each defect carries a type, a severity and a natural-language reason for the quality report.</div>
+        <div class="step"><b>Measured, not assumed</b>Each stage is evaluated separately. If a larger model or a better prompt classifies better than the detector, the fusion rule changes based on data.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div><b>Álvaro Martín Coll</b> · Physicist · AI engineer for industry and energy<br>
+      <span class="note">Data: NEU-DET, a surface-defect database of hot-rolled steel strip (Northeastern University), research use. VLM: qwen2.5vl:3b with Ollama on a laptop without a GPU (≈80 s per call). Demo project, no client data.</span></div>
+    <div><a class="cta" href="https://www.malt.com/profile/alvaromartincoll">Let's talk about your line</a></div>
+  </footer>
+</main>
+<script>/* Minimal SVG chart kit shared by the portfolio dashboards.
+   Line (crosshair + tooltip), scatter, horizontal bar. No dependencies. */
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const LOC = (document.documentElement.lang || "es").startsWith("en") ? "en-US" : "es-ES";
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const el = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const nice = (min, max, n = 5) => {
+    const span = max - min || 1;
+    const step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || 10 * mag;
+    const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+    const ticks = [];
+    for (let v = lo; v <= hi + step / 2; v += step) ticks.push(+v.toFixed(10));
+    return { lo, hi, ticks };
+  };
+  const fmt = (v) => {
+    const a = Math.abs(v);
+    if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+    if (a >= 1e4) return (v / 1e3).toFixed(0) + "K";
+    if (Number.isInteger(v)) return v.toLocaleString(LOC);
+    return v.toLocaleString(LOC, { maximumFractionDigits: 2 });
+  };
+
+  let tip;
+  const tooltip = () => {
+    if (!tip) { tip = document.createElement("div"); tip.className = "viz-tip"; document.body.appendChild(tip); }
+    return tip;
+  };
+  const showTip = (html, ev) => {
+    const t = tooltip(); t.innerHTML = html; t.style.opacity = 1;
+    const r = t.getBoundingClientRect();
+    let x = ev.clientX + 14, y = ev.clientY + 14;
+    if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+    if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+    t.style.left = x + "px"; t.style.top = y + "px";
+  };
+  const hideTip = () => { if (tip) tip.style.opacity = 0; };
+
+  function frame(host, o) {
+    host.innerHTML = "";
+    const W = host.clientWidth || 600, H = o.height || 300;
+    const m = { t: 12, r: o.right || 16, b: o.xLabel ? 44 : 28, l: 52 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img",
+                             "aria-label": o.aria || "" }, host);
+    return { svg, W, H, m, iw: W - m.l - m.r, ih: H - m.t - m.b };
+  }
+  function axes(f, xs, ys, o) {
+    const g = el("g", {}, f.svg);
+    ys.ticks.forEach((v) => {
+      const y = f.m.t + f.ih - ((v - ys.lo) / (ys.hi - ys.lo)) * f.ih;
+      el("line", { x1: f.m.l, x2: f.m.l + f.iw, y1: y, y2: y, stroke: css("--grid"), "stroke-width": 1 }, g);
+      const t = el("text", { x: f.m.l - 8, y: y + 4, "text-anchor": "end", class: "viz-tick" }, g);
+      t.textContent = (o.yFmt || fmt)(v);
+    });
+    xs.ticks.forEach((v) => {
+      const x = f.m.l + ((v - xs.lo) / (xs.hi - xs.lo)) * f.iw;
+      const t = el("text", { x, y: f.m.t + f.ih + 18, "text-anchor": "middle", class: "viz-tick" }, g);
+      t.textContent = (o.xFmt || fmt)(v);
+    });
+    el("line", { x1: f.m.l, x2: f.m.l + f.iw, y1: f.m.t + f.ih, y2: f.m.t + f.ih, stroke: css("--axis") }, g);
+    if (o.xLabel) {
+      const t = el("text", { x: f.m.l + f.iw / 2, y: f.H - 6, "text-anchor": "middle", class: "viz-label" }, g);
+      t.textContent = o.xLabel;
+    }
+    if (o.yLabel) {
+      const t = el("text", { x: 12, y: f.m.t + f.ih / 2, "text-anchor": "middle", class: "viz-label",
+                              transform: `rotate(-90 12 ${f.m.t + f.ih / 2})` }, g);
+      t.textContent = o.yLabel;
+    }
+  }
+
+  /* series: [{name, values, color, dash, fill}] ; x: array of numbers */
+  function line(host, o) {
+    const f = frame(host, o);
+    const all = o.series.flatMap((s) => s.values.filter((v) => v != null));
+    const xs = nice(Math.min(...o.x), Math.max(...o.x), o.xTicks || 6);
+    xs.lo = Math.min(...o.x); xs.hi = Math.max(...o.x);
+    xs.ticks = xs.ticks.filter((v) => v >= xs.lo && v <= xs.hi);
+    const ys = nice(o.yMin ?? Math.min(0, ...all), o.yMax ?? Math.max(...all), 5);
+    axes(f, xs, ys, o);
+    const X = (v) => f.m.l + ((v - xs.lo) / (xs.hi - xs.lo)) * f.iw;
+    const Y = (v) => f.m.t + f.ih - ((v - ys.lo) / (ys.hi - ys.lo)) * f.ih;
+    if (o.band) { // horizontal band e.g. alert zone
+      el("rect", { x: f.m.l, width: f.iw, y: Y(o.band.to), height: Y(o.band.from) - Y(o.band.to),
+                   fill: o.band.color, opacity: 0.12 }, f.svg);
+      const t = el("text", { x: f.m.l + f.iw - 6, y: Y(o.band.to) + 14, "text-anchor": "end", class: "viz-tick" }, f.svg);
+      t.textContent = o.band.label;
+    }
+    o.series.forEach((s) => {
+      let d = "", pen = false;
+      s.values.forEach((v, i) => {
+        if (v == null) { pen = false; return; }
+        d += (pen ? "L" : "M") + X(o.x[i]).toFixed(1) + "," + Y(v).toFixed(1); pen = true;
+      });
+      if (s.fill) {
+        const first = s.values.findIndex((v) => v != null);
+        const last = s.values.length - 1 - [...s.values].reverse().findIndex((v) => v != null);
+        el("path", { d: d + `L${X(o.x[last])},${Y(ys.lo)}L${X(o.x[first])},${Y(ys.lo)}Z`,
+                     fill: s.color, opacity: 0.1 }, f.svg);
+      }
+      el("path", { d, fill: "none", stroke: s.color, "stroke-width": s.width || 2,
+                   "stroke-linejoin": "round", "stroke-linecap": "round",
+                   "stroke-dasharray": s.dash || "" }, f.svg);
+    });
+    // crosshair
+    const hair = el("line", { y1: f.m.t, y2: f.m.t + f.ih, stroke: css("--axis"), opacity: 0 }, f.svg);
+    const dots = o.series.map((s) => el("circle", { r: 4, fill: s.color, stroke: css("--surface"),
+                                                     "stroke-width": 2, opacity: 0 }, f.svg));
+    const hit = el("rect", { x: f.m.l, y: f.m.t, width: f.iw, height: f.ih, fill: "transparent" }, f.svg);
+    hit.addEventListener("mousemove", (ev) => {
+      const r = f.svg.getBoundingClientRect();
+      const px = ((ev.clientX - r.left) / r.width) * f.W;
+      const xv = xs.lo + ((px - f.m.l) / f.iw) * (xs.hi - xs.lo);
+      let i = 0, best = Infinity;
+      o.x.forEach((v, k) => { const d = Math.abs(v - xv); if (d < best) { best = d; i = k; } });
+      hair.setAttribute("x1", X(o.x[i])); hair.setAttribute("x2", X(o.x[i])); hair.setAttribute("opacity", 1);
+      let html = `<b>${(o.xTip || ((v) => (o.xLabel || "x") + " " + fmt(v)))(o.x[i])}</b>`;
+      o.series.forEach((s, k) => {
+        const v = s.values[i];
+        if (v == null) { dots[k].setAttribute("opacity", 0); return; }
+        dots[k].setAttribute("cx", X(o.x[i])); dots[k].setAttribute("cy", Y(v)); dots[k].setAttribute("opacity", 1);
+        html += `<div><i style="background:${s.color}"></i>${s.name}: <b>${(o.yTip || fmt)(v)}</b></div>`;
+      });
+      showTip(html, ev);
+    });
+    hit.addEventListener("mouseleave", () => { hair.setAttribute("opacity", 0); dots.forEach((d) => d.setAttribute("opacity", 0)); hideTip(); });
+  }
+
+  /* points: [{x, y, label}] */
+  function scatter(host, o) {
+    const f = frame(host, o);
+    const vx = o.points.map((p) => p.x), vy = o.points.map((p) => p.y);
+    const lo = Math.min(0, ...vx, ...vy), hi = Math.max(...vx, ...vy);
+    const xs = nice(lo, hi, 5), ys = nice(lo, hi, 5);
+    axes(f, xs, ys, o);
+    const X = (v) => f.m.l + ((v - xs.lo) / (xs.hi - xs.lo)) * f.iw;
+    const Y = (v) => f.m.t + f.ih - ((v - ys.lo) / (ys.hi - ys.lo)) * f.ih;
+    if (o.diag) el("line", { x1: X(xs.lo), y1: Y(ys.lo), x2: X(Math.min(xs.hi, ys.hi)), y2: Y(Math.min(xs.hi, ys.hi)),
+                             stroke: css("--text-3"), "stroke-width": 1 }, f.svg);
+    o.points.forEach((p) => {
+      const c = el("circle", { cx: X(p.x), cy: Y(p.y), r: 4.5, fill: p.color || o.color,
+                               stroke: css("--surface"), "stroke-width": 2 }, f.svg);
+      const h = el("circle", { cx: X(p.x), cy: Y(p.y), r: 10, fill: "transparent" }, f.svg);
+      h.addEventListener("mousemove", (ev) => { c.setAttribute("r", 6); showTip(p.tip || `${fmt(p.x)} → ${fmt(p.y)}`, ev); });
+      h.addEventListener("mouseleave", () => { c.setAttribute("r", 4.5); hideTip(); });
+    });
+  }
+
+  /* items: [{label, value}] horizontal bars, value labels at tip */
+  function bars(host, o) {
+    host.innerHTML = "";
+    const max = Math.max(...o.items.map((d) => d.value));
+    o.items.forEach((d) => {
+      const row = document.createElement("div"); row.className = "viz-bar";
+      row.innerHTML = `<span class="viz-bar-l">${d.label}</span>
+        <span class="viz-bar-t"><span class="viz-bar-f" style="width:${(100 * d.value) / max}%;background:${d.color || o.color}"></span></span>
+        <span class="viz-bar-v">${(o.fmt || fmt)(d.value)}</span>`;
+      row.addEventListener("mousemove", (ev) => showTip(`<b>${d.label}</b><div>${(o.fmt || fmt)(d.value)}</div>`, ev));
+      row.addEventListener("mouseleave", hideTip);
+      host.appendChild(row);
+    });
+  }
+
+  /* Animate numbers counting up (data-count attr) */
+  function countUp(root = document) {
+    root.querySelectorAll("[data-count]").forEach((e) => {
+      const target = parseFloat(e.dataset.count), dec = +(e.dataset.dec || 0);
+      const pre = e.dataset.pre || "", suf = e.dataset.suf || "";
+      const t0 = performance.now(), dur = 1200;
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / dur), v = target * (1 - Math.pow(1 - k, 3));
+        e.textContent = pre + v.toLocaleString(LOC, { minimumFractionDigits: dec, maximumFractionDigits: dec }) + suf;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  window.Viz = { line, scatter, bars, countUp, fmt, LOC };
+})();
+</script>
+<script>
+const R = {"metrics": {"frames": 251, "tracks": 55, "gt_defects": 86, "gt_found": 45, "recall": 0.523, "precision": 0.855, "class_acc_detector": 0.957, "class_acc_cascade": 0.957, "vlm_calls": 114, "vlm_calls_if_every_frame": 1927, "consensus_rate": 0.8, "fp_suppressed_by_vlm": 0, "ms_det_per_frame": 78.5, "s_vlm_total": 8798.6, "backend": "ollama", "vlm_saving_pct": 94.1, "class_acc_vlm_type": 0.511, "fusion": "detector_type+vlm_severity_veto", "vlm_model": "qwen2.5vl:3b", "vlm_type_answers": {"patches": 45, "scratches": 1, "crazing": 1, "inclusion": 3}}, "sections": [{"section": 1, "defects": 5, "types": {"patches": 3, "crazing": 1, "rolled-in_scale": 1}, "decision": "RECHAZAR"}, {"section": 2, "defects": 4, "types": {"patches": 2, "inclusion": 1, "crazing": 1}, "decision": "REVISAR"}, {"section": 3, "defects": 3, "types": {"inclusion": 2, "patches": 1}, "decision": "REVISAR"}, {"section": 4, "defects": 7, "types": {"rolled-in_scale": 2, "inclusion": 4, "patches": 1}, "decision": "RECHAZAR"}, {"section": 5, "defects": 2, "types": {"rolled-in_scale": 1, "inclusion": 1}, "decision": "REVISAR"}, {"section": 6, "defects": 6, "types": {"patches": 5, "crazing": 1}, "decision": "RECHAZAR"}, {"section": 7, "defects": 10, "types": {"patches": 7, "rolled-in_scale": 2, "crazing": 1}, "decision": "RECHAZAR"}, {"section": 8, "defects": 3, "types": {"rolled-in_scale": 1, "scratches": 1, "patches": 1}, "decision": "RECHAZAR"}, {"section": 9, "defects": 4, "types": {"rolled-in_scale": 2, "patches": 1, "scratches": 1}, "decision": "RECHAZAR"}, {"section": 10, "defects": 6, "types": {"patches": 5, "rolled-in_scale": 1}, "decision": "RECHAZAR"}, {"section": 11, "defects": 2, "types": {"inclusion": 1, "patches": 1}, "decision": "REVISAR"}, {"section": 12, "defects": 3, "types": {"scratches": 3}, "decision": "REVISAR"}], "examples": [{"img": "crop_42.jpg", "final": "rolled-in_scale", "det_label": "rolled-in_scale", "gt": "rolled-in_scale", "severity": "medium", "vlm_calls": 2, "frames": 85, "consensus": true, "reason": "La imagen muestra una zona irregular en la superficie del acero, lo que sugiere la presencia de patches o manchas.", "vlm_label": "patches"}, {"img": "crop_25.jpg", "final": "rolled-in_scale", "det_label": "rolled-in_scale", "gt": "rolled-in_scale", "severity": "medium", "vlm_calls": 3, "frames": 69, "consensus": true, "reason": "La imagen muestra manchas irregulares en la superficie del acero, lo que sugiere la presencia de patches o zonas irregulares en la banda de acero.", "vlm_label": "patches"}, {"img": "crop_56.jpg", "final": "patches", "det_label": "patches", "gt": "patches", "severity": "medium", "vlm_calls": 2, "frames": 66, "consensus": true, "reason": "La imagen muestra una zona irregular en la superficie del acero, lo que sugiere la presencia de patches o manchas en la banda de acero.", "vlm_label": "patches"}, {"img": "crop_46.jpg", "final": "scratches", "det_label": "scratches", "gt": "scratches", "severity": "medium", "vlm_calls": 2, "frames": 62, "consensus": true, "reason": "Las líneas verticales en la superficie del acero sugieren arañazos lineales, lo que puede afectar la calidad de la producción.", "vlm_label": "scratches"}, {"img": "crop_9.jpg", "final": "inclusion", "det_label": "inclusion", "gt": "inclusion", "severity": "medium", "vlm_calls": 2, "frames": 60, "consensus": true, "reason": "La superficie de la banda de acero muestra manchas irregulares, lo que sugiere la presencia de patches o zonas irregulares en la superficie.", "vlm_label": "patches"}, {"img": "crop_36.jpg", "final": "patches", "det_label": "patches", "gt": "patches", "severity": "high", "vlm_calls": 3, "frames": 57, "consensus": true, "reason": "Las grietas en red son una condición común en la laminación en caliente, especialmente en acero, que puede ser causada por fluctuaciones en la temperatura o presión durante el proceso. Estas grietas pueden ser profundas y ser un problema de calidad, ya que pueden afectar la resistencia y la durabilidad del material.", "vlm_label": "crazing"}, {"img": "crop_10.jpg", "final": "patches", "det_label": "patches", "gt": "patches", "severity": "medium", "vlm_calls": 2, "frames": 56, "consensus": true, "reason": "La imagen muestra una zona irregular en la superficie de la banda de acero, lo que sugiere la presencia de patches o manchas irregulares en la superficie del acero.", "vlm_label": "patches"}, {"img": "crop_14.jpg", "final": "rolled-in_scale", "det_label": "rolled-in_scale", "gt": "rolled-in_scale", "severity": "medium", "vlm_calls": 2, "frames": 56, "consensus": true, "reason": "La imagen muestra una zona irregular en la superficie de la banda de acero, lo que sugiere la presencia de patches o manchas irregulares en la superficie del acero.", "vlm_label": "patches"}, {"img": "crop_19.jpg", "final": "inclusion", "det_label": "inclusion", "gt": "inclusion", "severity": "medium", "vlm_calls": 2, "frames": 56, "consensus": true, "reason": "La superficie de la banda de acero muestra manchas irregulares, lo que sugiere la presencia de patches o zonas no uniformes.", "vlm_label": "patches"}, {"img": "crop_28.jpg", "final": "patches", "det_label": "patches", "gt": "patches", "severity": "medium", "vlm_calls": 2, "frames": 56, "consensus": true, "reason": "La imagen muestra una zona irregular en la superficie de la banda de acero, lo que sugiere la presencia de manchas o zonas irregulares.", "vlm_label": "patches"}, {"img": "crop_31.jpg", "final": "patches", "det_label": "patches", "gt": "patches", "severity": "medium", "vlm_calls": 2, "frames": 56, "consensus": true, "reason": "La imagen muestra una zona irregular en la superficie de la banda de acero, lo que sugiere la presencia de patches o manchas irregulares en la superficie del acero.", "vlm_label": "patches"}, {"img": "crop_50.jpg", "final": "rolled-in_scale", "det_label": "rolled-in_scale", "gt": "rolled-in_scale", "severity": "medium", "vlm_calls": 2, "frames": 56, "consensus": true, "reason": "La superficie muestra zonas irregulares y manchas, lo que sugiere la presencia de patches.", "vlm_label": "patches"}], "timeline": [[0, 9, 7], [1, 8, 1], [2, 9, 0], [3, 10, 0], [4, 7, 0], [5, 7, 0], [6, 8, 3], [7, 9, 3], [8, 8, 0], [9, 10, 0], [10, 9, 0], [11, 9, 0], [12, 10, 0], [13, 10, 0], [14, 10, 0], [15, 9, 1], [16, 8, 0], [17, 10, 0], [18, 8, 0], [19, 9, 1], [20, 8, 0], [21, 9, 1], [22, 6, 1], [23, 6, 0], [24, 6, 0], [25, 7, 1], [26, 8, 1], [27, 7, 0], [28, 7, 1], [29, 6, 0], [30, 6, 0], [31, 9, 0], [32, 10, 0], [33, 12, 2], [34, 12, 2], [35, 10, 1], [36, 9, 0], [37, 9, 0], [38, 11, 0], [39, 10, 1], [40, 11, 2], [41, 10, 1], [42, 11, 0], [43, 9, 0], [44, 13, 1], [45, 9, 0], [46, 9, 0], [47, 11, 1], [48, 8, 0], [49, 9, 1], [50, 8, 0], [51, 12, 1], [52, 10, 0], [53, 8, 1], [54, 10, 1], [55, 7, 1], [56, 8, 0], [57, 7, 0], [58, 8, 0], [59, 10, 0], [60, 7, 0], [61, 8, 0], [62, 8, 1], [63, 7, 0], [64, 7, 0], [65, 6, 0], [66, 8, 0], [67, 6, 0], [68, 8, 1], [69, 6, 0], [70, 5, 0], [71, 4, 0], [72, 6, 0], [73, 6, 0], [74, 7, 0], [75, 7, 1], [76, 5, 1], [77, 7, 0], [78, 6, 0], [79, 6, 0], [80, 6, 1], [81, 3, 0], [82, 5, 2], [83, 4, 0], [84, 5, 0], [85, 6, 1], [86, 4, 0], [87, 6, 0], [88, 6, 1], [89, 4, 0], [90, 6, 0], [91, 7, 2], [92, 6, 0], [93, 8, 1], [94, 8, 1], [95, 6, 1], [96, 6, 0], [97, 4, 1], [98, 4, 0], [99, 6, 0], [100, 5, 0], [101, 5, 1], [102, 6, 2], [103, 6, 1], [104, 6, 0], [105, 6, 0], [106, 7, 0], [107, 6, 0], [108, 6, 1], [109, 8, 1], [110, 7, 0], [111, 8, 0], [112, 7, 0], [113, 8, 0], [114, 8, 1], [115, 8, 1], [116, 9, 0], [117, 10, 0], [118, 10, 1], [119, 11, 1], [120, 9, 0], [121, 9, 0], [122, 8, 0], [123, 10, 3], [124, 7, 1], [125, 8, 2], [126, 8, 0], [127, 9, 1], [128, 11, 0], [129, 10, 3], [130, 8, 0], [131, 9, 2], [132, 9, 0], [133, 10, 0], [134, 10, 0], [135, 10, 1], [136, 8, 0], [137, 12, 1], [138, 10, 0], [139, 9, 0], [140, 10, 0], [141, 10, 0], [142, 11, 0], [143, 10, 1], [144, 9, 0], [145, 8, 0], [146, 7, 0], [147, 9, 0], [148, 10, 0], [149, 8, 0], [150, 9, 1], [151, 7, 1], [152, 7, 1], [153, 10, 0], [154, 8, 0], [155, 9, 0], [156, 8, 0], [157, 9, 1], [158, 10, 1], [159, 9, 0], [160, 9, 0], [161, 11, 0], [162, 11, 2], [163, 11, 1], [164, 10, 0], [165, 8, 1], [166, 7, 0], [167, 7, 1], [168, 7, 1], [169, 7, 0], [170, 7, 0], [171, 7, 0], [172, 7, 0], [173, 7, 0], [174, 6, 0], [175, 7, 0], [176, 6, 1], [177, 6, 1], [178, 7, 0], [179, 3, 0], [180, 6, 0], [181, 7, 0], [182, 7, 2], [183, 7, 1], [184, 8, 0], [185, 8, 0], [186, 8, 0], [187, 8, 0], [188, 9, 0], [189, 8, 1], [190, 8, 0], [191, 8, 0], [192, 8, 1], [193, 9, 0], [194, 7, 0], [195, 8, 1], [196, 7, 0], [197, 7, 0], [198, 9, 2], [199, 7, 0], [200, 8, 0], [201, 7, 0], [202, 7, 1], [203, 7, 1], [204, 7, 1], [205, 7, 0], [206, 7, 0], [207, 7, 0], [208, 6, 1], [209, 9, 1], [210, 9, 1], [211, 8, 0], [212, 8, 0], [213, 8, 0], [214, 9, 0], [215, 6, 0], [216, 6, 1], [217, 8, 1], [218, 7, 0], [219, 8, 0], [220, 7, 0], [221, 8, 0], [222, 7, 0], [223, 7, 1], [224, 6, 0], [225, 5, 0], [226, 7, 1], [227, 6, 0], [228, 6, 0], [229, 6, 1], [230, 5, 0], [231, 8, 0], [232, 6, 1], [233, 6, 0], [234, 9, 0], [235, 7, 0], [236, 7, 0], [237, 9, 0], [238, 8, 1], [239, 8, 0], [240, 8, 0], [241, 8, 0], [242, 9, 0], [243, 9, 1], [244, 9, 0], [245, 7, 0], [246, 7, 0], [247, 5, 0], [248, 6, 1], [249, 5, 1], [250, 5, 0]], "defects": [{"id": 42, "box": [57.0, 1417.3, 144.0, 1593.1], "frames": 85, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.342, "vlm_label": "patches"}, {"id": 25, "box": [423.9, 852.3, 563.1, 1000.1], "frames": 69, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": "rolled-in_scale", "mean_conf": 0.439, "vlm_label": "patches"}, {"id": 56, "box": [334.3, 1804.7, 398.3, 1996.2], "frames": 66, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.723, "vlm_label": "patches"}, {"id": 46, "box": [293.5, 1401.4, 326.8, 1597.4], "frames": 62, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.661, "vlm_label": "scratches"}, {"id": 9, "box": [433.6, 400.3, 475.4, 579.6], "frames": 60, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.457, "vlm_label": "patches"}, {"id": 36, "box": [420.3, 1202.0, 479.2, 1338.9], "frames": 57, "det_label": "patches", "final": "patches", "severity": "high", "consensus": true, "vlm_calls": 3, "gt": "patches", "mean_conf": 0.652, "vlm_label": "crazing"}, {"id": 10, "box": [50.3, 428.6, 106.1, 541.1], "frames": 56, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.709, "vlm_label": "patches"}, {"id": 14, "box": [290.0, 599.6, 409.1, 664.7], "frames": 56, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.365, "vlm_label": "patches"}, {"id": 19, "box": [22.5, 663.1, 60.1, 785.0], "frames": 56, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.626, "vlm_label": "patches"}, {"id": 28, "box": [1.2, 1001.0, 94.5, 1080.0], "frames": 56, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.744, "vlm_label": "patches"}, {"id": 31, "box": [99.1, 1079.3, 159.0, 1173.4], "frames": 56, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.626, "vlm_label": "patches"}, {"id": 50, "box": [38.9, 1613.8, 160.6, 1800.7], "frames": 56, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.34, "vlm_label": "patches"}, {"id": 51, "box": [292.4, 1601.9, 387.0, 1797.7], "frames": 51, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": "inclusion", "mean_conf": 0.258, "vlm_label": "patches"}, {"id": 57, "box": [198.1, 1808.7, 261.5, 1922.3], "frames": 51, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.314, "vlm_label": "patches"}, {"id": 59, "box": [446.5, 1893.1, 518.9, 1982.1], "frames": 51, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.626, "vlm_label": "patches"}, {"id": 38, "box": [506.5, 1265.9, 599.8, 1373.3], "frames": 50, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.357, "vlm_label": "patches"}, {"id": 16, "box": [4.0, 600.7, 31.4, 666.1], "frames": 48, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.185, "vlm_label": "patches"}, {"id": 4, "box": [312.3, 335.1, 357.9, 396.4], "frames": 47, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.547, "vlm_label": "patches"}, {"id": 12, "box": [288.9, 450.9, 316.3, 512.5], "frames": 47, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.336, "vlm_label": "patches"}, {"id": 35, "box": [49.3, 1137.9, 96.3, 1200.4], "frames": 47, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": "patches", "mean_conf": 0.238, "vlm_label": "patches"}, {"id": 15, "box": [47.3, 600.5, 76.4, 662.5], "frames": 45, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.222, "vlm_label": "patches"}, {"id": 40, "box": [570.9, 1262.1, 599.8, 1376.3], "frames": 45, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.253, "vlm_label": "patches"}, {"id": 3, "box": [483.0, 212.1, 521.2, 389.6], "frames": 43, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "inclusion", "mean_conf": 0.577, "vlm_label": "patches"}, {"id": 49, "box": [413.0, 1594.0, 586.7, 1684.3], "frames": 43, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.213, "vlm_label": "patches"}, {"id": 61, "box": [197.9, 1927.0, 255.5, 1998.6], "frames": 43, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": "patches", "mean_conf": 0.242, "vlm_label": "patches"}, {"id": 62, "box": [455.0, 2002.9, 518.9, 2196.2], "frames": 42, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": "inclusion", "mean_conf": 0.632, "vlm_label": "patches"}, {"id": 63, "box": [267.2, 2036.7, 325.7, 2176.9], "frames": 41, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.764, "vlm_label": "patches"}, {"id": 55, "box": [249.7, 1605.5, 274.6, 1797.9], "frames": 40, "det_label": "scratches", "final": "scratches", "severity": "high", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.202, "vlm_label": "inclusion"}, {"id": 20, "box": [5.8, 602.1, 68.5, 785.5], "frames": 39, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": null, "mean_conf": 0.215, "vlm_label": "patches"}, {"id": 47, "box": [403.4, 1403.4, 520.5, 1596.3], "frames": 36, "det_label": "patches", "final": "patches", "severity": "high", "consensus": true, "vlm_calls": 3, "gt": "crazing", "mean_conf": 0.233, "vlm_label": "inclusion"}, {"id": 30, "box": [118.6, 1007.4, 198.0, 1083.8], "frames": 35, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": "patches", "mean_conf": 0.144, "vlm_label": "patches"}, {"id": 2, "box": [311.7, 206.4, 362.8, 265.3], "frames": 30, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.618, "vlm_label": "patches"}, {"id": 48, "box": [53.1, 1297.3, 153.3, 1402.1], "frames": 29, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": "rolled-in_scale", "mean_conf": 0.171, "vlm_label": "patches"}, {"id": 32, "box": [195.2, 1019.0, 368.9, 1199.6], "frames": 26, "det_label": "crazing", "final": "crazing", "severity": "medium", "consensus": true, "vlm_calls": 4, "gt": "crazing", "mean_conf": 0.13, "vlm_label": "patches"}, {"id": 5, "box": [134.7, 84.7, 197.3, 197.6], "frames": 22, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": false, "vlm_calls": 1, "gt": "patches", "mean_conf": 0.625, "vlm_label": "patches"}, {"id": 0, "box": [7.3, 80.0, 89.3, 189.5], "frames": 21, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": false, "vlm_calls": 1, "gt": "patches", "mean_conf": 0.669, "vlm_label": "patches"}, {"id": 8, "box": [72.1, 262.7, 201.5, 399.0], "frames": 21, "det_label": "crazing", "final": "crazing", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "crazing", "mean_conf": 0.125, "vlm_label": "patches"}, {"id": 41, "box": [507.4, 1314.7, 583.1, 1364.9], "frames": 19, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": "patches", "mean_conf": 0.154, "vlm_label": "patches"}, {"id": 68, "box": [223.8, 2202.0, 259.3, 2328.9], "frames": 17, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "scratches", "mean_conf": 0.465, "vlm_label": "patches"}, {"id": 7, "box": [209.5, 82.8, 392.9, 191.9], "frames": 16, "det_label": "crazing", "final": "crazing", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.192, "vlm_label": "patches"}, {"id": 22, "box": [289.7, 602.7, 504.8, 696.6], "frames": 16, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.134, "vlm_label": "patches"}, {"id": 69, "box": [331.5, 2209.2, 364.5, 2342.5], "frames": 15, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": false, "vlm_calls": 0, "gt": "scratches", "mean_conf": 0.538, "vlm_label": null}, {"id": 6, "box": [453.0, 58.8, 573.4, 195.5], "frames": 14, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "rolled-in_scale", "mean_conf": 0.174, "vlm_label": "patches"}, {"id": 39, "box": [207.5, 1195.7, 387.6, 1286.5], "frames": 14, "det_label": "crazing", "final": "crazing", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.172, "vlm_label": "patches"}, {"id": 70, "box": [431.2, 2214.7, 458.2, 2345.0], "frames": 14, "det_label": "scratches", "final": "scratches", "severity": "medium", "consensus": false, "vlm_calls": 0, "gt": "scratches", "mean_conf": 0.405, "vlm_label": null}, {"id": 64, "box": [47.9, 1765.1, 183.4, 1904.4], "frames": 13, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": null, "mean_conf": 0.208, "vlm_label": "patches"}, {"id": 34, "box": [159.0, 1008.5, 198.3, 1081.7], "frames": 12, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": true, "vlm_calls": 2, "gt": "patches", "mean_conf": 0.151, "vlm_label": "patches"}, {"id": 37, "box": [575.6, 1201.3, 599.8, 1331.6], "frames": 10, "det_label": "patches", "final": "patches", "severity": "high", "consensus": false, "vlm_calls": 1, "gt": "patches", "mean_conf": 0.179, "vlm_label": "inclusion"}, {"id": 29, "box": [580.5, 722.2, 600.0, 801.0], "frames": 9, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": false, "vlm_calls": 1, "gt": null, "mean_conf": 0.157, "vlm_label": "patches"}, {"id": 53, "box": [56.8, 1352.0, 150.8, 1438.3], "frames": 9, "det_label": "rolled-in_scale", "final": "rolled-in_scale", "severity": "medium", "consensus": false, "vlm_calls": 1, "gt": "rolled-in_scale", "mean_conf": 0.172, "vlm_label": "patches"}, {"id": 27, "box": [330.8, 868.4, 373.2, 996.3], "frames": 8, "det_label": "inclusion", "final": "inclusion", "severity": "medium", "consensus": true, "vlm_calls": 3, "gt": null, "mean_conf": 0.137, "vlm_label": "patches"}, {"id": 1, "box": [140.5, 12.1, 197.2, 67.7], "frames": 4, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": false, "vlm_calls": 0, "gt": "patches", "mean_conf": 0.562, "vlm_label": null}, {"id": 43, "box": [400.6, 1366.1, 475.0, 1431.2], "frames": 3, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": false, "vlm_calls": 0, "gt": "patches", "mean_conf": 0.231, "vlm_label": null}, {"id": 54, "box": [411.8, 1312.0, 480.8, 1399.3], "frames": 3, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": false, "vlm_calls": 1, "gt": "patches", "mean_conf": 0.118, "vlm_label": "patches"}, {"id": 71, "box": [451.3, 1944.0, 565.9, 2000.6], "frames": 3, "det_label": "patches", "final": "patches", "severity": "medium", "consensus": false, "vlm_calls": 0, "gt": null, "mean_conf": 0.169, "vlm_label": null}], "strip_px": [600, 2400], "labels_es": {"crazing": "Grietas", "inclusion": "Inclusión", "patches": "Manchas", "pitted_surface": "Picaduras", "rolled-in_scale": "Cascarilla laminada", "scratches": "Arañazos", "ok": "Sin defecto"}};
+const $ = (id) => document.getElementById(id);
+const M = R.metrics, ES = { crazing: "Crazing", inclusion: "Inclusion", patches: "Patches", pitted_surface: "Pitted surface", "rolled-in_scale": "Rolled-in scale", scratches: "Scratches", ok: "No defect" };
+const DEC = { OK: "OK", REVISAR: "review", RECHAZAR: "reject" };
+const SEV = { low: "low", medium: "medium", high: "high" };
+const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
+const n = (v) => v.toLocaleString("en-US");
+if (M.backend !== "ollama") { $("banner").hidden = false;
+  $("banner").innerHTML = "<b>Preview without the VLM.</b> These results use the detector in all three stages to test the pipeline. The published version uses the local VLM."; }
+$("k-save").textContent = Math.round(M.vlm_saving_pct) + "%";
+$("k-save-d").textContent = `${n(M.vlm_calls)} calls instead of ${n(M.vlm_calls_if_every_frame)}`;
+$("k-rec").textContent = pct(M.recall);
+$("k-rec-d").textContent = `${M.gt_found} of ${M.gt_defects} labelled defects`;
+$("k-acc").textContent = pct(M.class_acc_cascade);
+$("k-acc-d").textContent = M.class_acc_vlm_type != null ? `if the VLM decided it: ${pct(M.class_acc_vlm_type)}` : `detector alone: ${pct(M.class_acc_detector)}`;
+$("k-ms").textContent = Math.round(M.ms_det_per_frame) + " ms";
+$("st1").innerHTML = `${n(M.frames)} <small>frames analysed</small>`;
+$("st2").innerHTML = `${n(M.vlm_calls)} <small>calls · ${pct(M.consensus_rate)} with consensus${M.fp_suppressed_by_vlm ? " · " + M.fp_suppressed_by_vlm + " false positives discarded" : ""}</small>`;
+const dec = R.sections.reduce((a, s) => (a[s.decision] = (a[s.decision] || 0) + 1, a), {});
+$("st3").innerHTML = `${R.sections.length} <small>sections · ${dec.OK || 0} OK · ${dec.REVISAR || 0} review · ${dec.RECHAZAR || 0} reject</small>`;
+
+$("strip").src = "img/strip_overview_h.jpg";
+$("secs").innerHTML = R.sections.map((s) => `<div class="d-${s.decision}" title="Section ${s.section}: ${s.defects} defects · ${DEC[s.decision]}">${s.section}</div>`).join("");
+$("sec-sub").textContent = `${R.sections.length} strip sections inspected.`;
+
+function smooth(a, w) { return a.map((_, i) => { const s = a.slice(Math.max(0, i - w + 1), i + 1); return s.reduce((x, y) => x + y, 0) / s.length; }); }
+function draw() {
+  const tl = R.timeline;
+  Viz.line($("tl"), { x: tl.map((t) => t[0]), height: 280, xLabel: "Frame", yMin: 0, xTip: (v) => "Frame " + v,
+    yTip: (v) => v.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+    series: [{ name: "YOLO detections", values: smooth(tl.map((t) => t[1]), 10), color: "#3987e5", fill: true },
+             { name: "VLM calls", values: smooth(tl.map((t) => t[2]), 10), color: "#9085e9" }] });
+  Viz.bars($("dec"), { fmt: (v) => v, items: [
+    { label: "OK", value: dec.OK || 0, color: "#199e70" },
+    { label: "Review", value: dec.REVISAR || 0, color: "#c98500" },
+    { label: "Reject", value: dec.RECHAZAR || 0, color: "#d03b3b" }] });
+}
+draw();
+addEventListener("resize", () => { clearTimeout(window._rt); window._rt = setTimeout(draw, 150); });
+$("crops").innerHTML = R.examples.map((e) => `<div class="crop"><img src="img/${e.img}" alt="${ES[e.final] || e.final}" loading="lazy">
+  <div><b>${ES[e.final] || e.final}</b>Reference: ${e.gt ? ES[e.gt] : "—"}<br>${e.vlm_calls} calls · seen in ${e.frames} frames
+  ${e.vlm_label ? `<br>VLM: ${ES[e.vlm_label] || e.vlm_label} · ${SEV[e.severity] || e.severity} severity` : ""}
+  ${e.reason && M.backend === "ollama" ? `<div class="r">VLM note (Spanish prompt): «${e.reason}»</div>` : ""}</div></div>`).join("");
+if (M.class_acc_vlm_type != null) {
+  const VA = M.vlm_type_answers || {}, tot = Object.values(VA).reduce((a, b) => a + b, 0), top = Object.entries(VA).sort((a, b) => b[1] - a[1])[0];
+  Viz.bars($("lesson"), { fmt: pct, items: [
+    { label: "YOLO11n detector decides the type", value: M.class_acc_detector, color: "#3987e5" },
+    { label: "3B VLM decides the type", value: M.class_acc_vlm_type, color: "#9085e9" }] });
+  $("lesson-t").innerHTML = `The VLM answered <b>"${ES[top[0]] || top[0]}"</b> for ${top[1]} of ${tot} defects: a consistent bias that consensus can't filter out, because two identical wrong answers are still consensus. `
+    + `Final design: <b>the detector decides the type</b> (${pct(M.class_acc_cascade)} correct) and the VLM grades severity, explains the defect and can veto a false positive. `
+    + `The VLM answers come from the same run; only the fusion rule changes (<code>src/fuse.py</code>).`;
+} else { $("lesson").closest(".card").hidden = true; }
+
+const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .1 });
+document.querySelectorAll(".reveal").forEach((e) => io.observe(e));
+
+// Hero background: a strip moving under a scan line
+(function () {
+  const c = $("bg"), x = c.getContext("2d"); let w, h, t = 0;
+  const fit = () => { w = c.width = c.offsetWidth * devicePixelRatio; h = c.height = c.offsetHeight * devicePixelRatio; };
+  fit(); addEventListener("resize", fit);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const spots = Array.from({ length: 40 }, () => ({ x: Math.random(), y: Math.random(), r: 2 + Math.random() * 10 }));
+  (function d() {
+    x.clearRect(0, 0, w, h);
+    const sx = w * 0.72;
+    spots.forEach((s) => {
+      const px = ((s.x - t) % 1 + 1) % 1 * w, py = s.y * h;
+      const near = Math.abs(px - sx) < 40 * devicePixelRatio;
+      x.strokeStyle = near ? "rgba(144,133,233,.9)" : "rgba(144,133,233,.18)"; x.lineWidth = devicePixelRatio;
+      x.strokeRect(px - s.r * devicePixelRatio, py - s.r * devicePixelRatio, 2 * s.r * devicePixelRatio, 2 * s.r * devicePixelRatio);
+    });
+    x.fillStyle = "rgba(144,133,233,.35)"; x.fillRect(sx, 0, 2 * devicePixelRatio, h);
+    t += 0.0008; if (!reduce) requestAnimationFrame(d);
+  })();
+})();
+</script>
+</body>
+</html>

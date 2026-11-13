@@ -40,7 +40,7 @@
     <div class="eyebrow">Caso demo · Inspección visual industrial</div>
     <h1>Un detector barato en cada fotograma, un modelo de visión-lenguaje solo cuando hace falta</h1>
     <p class="lede">Inspección de defectos en una banda de acero laminado en caliente con una cascada: YOLO localiza en tiempo real,
-      un VLM local confirma y describe cada defecto con pocos recortes hasta llegar a consenso, y el sistema decide por tramo: OK, revisar o rechazar.</p>
+      un VLM local revisa unos pocos recortes de cada defecto para graduar su severidad y explicarlo, y el sistema decide por tramo: OK, revisar o rechazar.</p>
     <div class="tags"><span class="tag">YOLO11</span><span class="tag">VLM local (Ollama)</span><span class="tag">Consenso</span><span class="tag">Siderurgia</span><span class="tag">Datos públicos</span></div>
   </div>
 </header>
@@ -60,7 +60,7 @@
       <div class="flow">
         <div class="stage"><div class="n" style="color:var(--s1)">Etapa 1 · cada fotograma</div><h3>Detector YOLO11n</h3><p>Localiza posibles defectos y los asocia entre fotogramas con la posición de la banda.</p><div class="m" id="st1"></div></div>
         <div class="arrow">→</div>
-        <div class="stage"><div class="n" style="color:var(--s4)">Etapa 2 · pocos recortes</div><h3>VLM local</h3><p>Clasifica tipo y severidad. Se le pregunta hasta que dos respuestas coinciden (máx. 4 por defecto).</p><div class="m" id="st2"></div></div>
+        <div class="stage"><div class="n" style="color:var(--s4)">Etapa 2 · pocos recortes</div><h3>VLM local</h3><p>Gradúa la severidad, explica el defecto y puede descartar falsos positivos. Se le pregunta hasta que dos respuestas coinciden (máx. 4 por defecto). El tipo lo decide el detector.</p><div class="m" id="st2"></div></div>
         <div class="arrow">→</div>
         <div class="stage"><div class="n" style="color:var(--s3)">Etapa 3 · por tramo</div><h3>Informe y decisión</h3><p>Defectos, tipos y severidad por tramo de banda: OK, revisar o rechazar.</p><div class="m" id="st3"></div></div>
       </div>
@@ -88,24 +88,33 @@
 
     <div class="card reveal">
       <h2>Defectos y lo que dijo el modelo</h2>
-      <p class="sub">Recortes de los defectos más persistentes, con la etiqueta final, la referencia y cuántas llamadas hicieron falta.</p>
+      <p class="sub">Recortes de los defectos más persistentes: tipo final (detector), referencia, lo que respondió el VLM y su explicación.</p>
       <div class="crops" id="crops"></div>
     </div>
 
     <div class="card reveal">
+      <h2>Lo que no funcionó: el VLM decidiendo el tipo</h2>
+      <p class="sub">La primera versión dejaba que el VLM eligiera el tipo de defecto. Con un modelo de 3B en CPU, empeoró al detector.</p>
+      <div class="grid" style="margin-top:6px">
+        <div class="span-6"><div id="lesson"></div></div>
+        <div class="span-6"><p class="note" id="lesson-t" style="font-size:14px;line-height:1.6;margin:0"></p></div>
+      </div>
+    </div>
+    <div class="card reveal">
       <h2>Por qué en cascada</h2>
       <div class="steps">
         <div class="step"><b>Coste</b>Un VLM en cada fotograma es caro y lento. Aquí solo ve unos pocos recortes por defecto.</div>
-        <div class="step"><b>Fiabilidad</b>El consenso entre respuestas filtra salidas erráticas del VLM, y el VLM puede descartar falsos positivos del detector.</div>
+        <div class="step"><b>Fiabilidad</b>El consenso filtra respuestas erráticas, pero no corrige un sesgo: por eso el tipo lo decide el modelo entrenado para ello y el VLM aporta lo que el detector no sabe dar.</div>
         <div class="step"><b>Privacidad</b>El VLM corre en local con Ollama: las imágenes de la planta no salen de la fábrica.</div>
         <div class="step"><b>Explicable</b>Cada defecto lleva tipo, severidad y una razón en lenguaje natural para el informe de calidad.</div>
+        <div class="step"><b>Medido, no supuesto</b>Cada etapa se evalúa por separado. Si un modelo más grande o un prompt mejor clasifican mejor que el detector, la regla de fusión cambia con datos.</div>
       </div>
     </div>
   </section>
 
   <footer class="footer">
     <div><b>Álvaro Martín Coll</b> · Físico · Ingeniero de IA para industria y energía<br>
-      <span class="note">Datos: NEU-DET, base de datos de defectos superficiales de banda laminada en caliente (Northeastern University), uso de investigación. Proyecto demostrativo, sin datos de clientes.</span></div>
+      <span class="note">Datos: NEU-DET, base de datos de defectos superficiales de banda laminada en caliente (Northeastern University), uso de investigación. VLM: qwen2.5vl:3b con Ollama en un portátil sin GPU (≈80 s por llamada). Proyecto demostrativo, sin datos de clientes.</span></div>
     <div><a class="cta" href="{{MALT_URL}}">Hablemos de tu línea</a></div>
   </footer>
 </main>
@@ -114,6 +123,7 @@
 const R = /*DATA*/;
 const $ = (id) => document.getElementById(id);
 const M = R.metrics, ES = R.labels_es;
+const SEV = { low: "baja", medium: "media", high: "alta" };
 const pct = (v) => v == null ? "–" : Math.round(v * 100) + " %";
 const n = (v) => v.toLocaleString("es-ES");
 if (M.backend !== "ollama") { $("banner").hidden = false;
@@ -123,7 +133,7 @@ $("k-save-d").textContent = `${n(M.vlm_calls)} llamadas en lugar de ${n(M.vlm_ca
 $("k-rec").textContent = pct(M.recall);
 $("k-rec-d").textContent = `${M.gt_found} de ${M.gt_defects} defectos etiquetados`;
 $("k-acc").textContent = pct(M.class_acc_cascade);
-$("k-acc-d").textContent = `solo detector: ${pct(M.class_acc_detector)}`;
+$("k-acc-d").textContent = M.class_acc_vlm_type != null ? `si lo decidía el VLM: ${pct(M.class_acc_vlm_type)}` : `solo detector: ${pct(M.class_acc_detector)}`;
 $("k-ms").textContent = Math.round(M.ms_det_per_frame) + " ms";
 $("st1").innerHTML = `${n(M.frames)} <small>fotogramas analizados</small>`;
 $("st2").innerHTML = `${n(M.vlm_calls)} <small>llamadas · ${pct(M.consensus_rate)} con consenso${M.fp_suppressed_by_vlm ? " · " + M.fp_suppressed_by_vlm + " falsos positivos descartados" : ""}</small>`;
@@ -150,7 +160,17 @@ draw();
 addEventListener("resize", () => { clearTimeout(window._rt); window._rt = setTimeout(draw, 150); });
 $("crops").innerHTML = R.examples.map((e) => `<div class="crop"><img src="img/${e.img}" alt="${ES[e.final] || e.final}" loading="lazy">
   <div><b>${ES[e.final] || e.final}</b>Referencia: ${e.gt ? ES[e.gt] : "—"}<br>${e.vlm_calls} llamadas · visto en ${e.frames} fotogramas
+  ${e.vlm_label ? `<br>VLM: ${ES[e.vlm_label] || e.vlm_label} · severidad ${SEV[e.severity] || e.severity}` : ""}
   ${e.reason && M.backend === "ollama" ? `<div class="r">«${e.reason}»</div>` : ""}</div></div>`).join("");
+if (M.class_acc_vlm_type != null) {
+  const VA = M.vlm_type_answers || {}, tot = Object.values(VA).reduce((a, b) => a + b, 0), top = Object.entries(VA).sort((a, b) => b[1] - a[1])[0];
+  Viz.bars($("lesson"), { fmt: pct, items: [
+    { label: "Detector YOLO11n decide el tipo", value: M.class_acc_detector, color: "#3987e5" },
+    { label: "VLM de 3B decide el tipo", value: M.class_acc_vlm_type, color: "#9085e9" }] });
+  $("lesson-t").innerHTML = `El VLM respondió <b>«${ES[top[0]] || top[0]}»</b> en ${top[1]} de ${tot} defectos: un sesgo consistente que el consenso no puede filtrar, porque dos respuestas iguales y erróneas también son consenso. `
+    + `Diseño final: <b>el detector decide el tipo</b> (${pct(M.class_acc_cascade)} de acierto) y el VLM gradúa la severidad, explica el defecto y puede vetar un falso positivo. `
+    + `Las respuestas del VLM son las de la misma ejecución; solo cambia la regla de fusión (<code>src/fuse.py</code>).`;
+} else { $("lesson").closest(".card").hidden = true; }
 
 const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .1 });
 document.querySelectorAll(".reveal").forEach((e) => io.observe(e));
