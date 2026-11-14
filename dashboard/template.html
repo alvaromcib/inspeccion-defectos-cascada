@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Inspección de defectos en cascada: detector + VLM · Álvaro Martín Coll</title>
+<title>Inspección automática de banda de acero · Álvaro Martín Coll</title>
 <style>/*CSS*/</style>
 <style>
-:root { --accent: #6250d6; --s4: #9085e9; }
+:root { --accent: #3987e5; --s4: #9085e9; }
 .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 10px; align-items: stretch; }
 @media (max-width: 860px) { .flow { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); justify-self: center; } }
 .stage { background: var(--surface-2); border-radius: 14px; padding: 18px; border: 1px solid var(--ring); }
@@ -31,6 +31,10 @@
 .crop .r { color: var(--text-3); margin-top: 4px; }
 .banner { background: color-mix(in srgb, var(--warn) 18%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent); border-radius: 12px; padding: 12px 16px; font-size: 14px; margin-bottom: 20px; }
 .legend-sq i { width: 12px; height: 12px; border-radius: 3px; }
+.rule { background: var(--surface-2); border-radius: 12px; padding: 14px 16px; font-size: 13.5px; color: var(--text-2); margin-top: 14px; line-height: 1.6; }
+.rule b { color: var(--text-1); }
+.verdict { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--crit); }
+.crop .ok { color: var(--good); } .crop .ko { color: var(--crit); }
 </style>
 </head>
 <body>
@@ -38,83 +42,83 @@
   <canvas id="bg"></canvas>
   <div class="wrap">
     <div class="eyebrow">Caso demo · Inspección visual industrial</div>
-    <h1>Un detector barato en cada fotograma, un modelo de visión-lenguaje solo cuando hace falta</h1>
-    <p class="lede">Inspección de defectos en una banda de acero laminado en caliente con una cascada: YOLO localiza en tiempo real,
-      un VLM local revisa unos pocos recortes de cada defecto para graduar su severidad y explicarlo, y el sistema decide por tramo: OK, revisar o rechazar.</p>
-    <div class="tags"><span class="tag">YOLO11</span><span class="tag">VLM local (Ollama)</span><span class="tag">Consenso</span><span class="tag">Siderurgia</span><span class="tag">Datos públicos</span></div>
+    <h1>Detectar, seguir y decidir: inspección automática de banda de acero en CPU</h1>
+    <p class="lede">Un detector YOLO11 analiza cada fotograma de una banda laminada en caliente, sigue cada defecto mientras la banda avanza
+      y genera un informe por tramo con una decisión explícita: OK, revisar o rechazar. Sin GPU y sin enviar imágenes fuera de la planta.</p>
+    <div class="tags"><span class="tag">YOLO11</span><span class="tag">Seguimiento</span><span class="tag">Reglas de calidad</span><span class="tag">Siderurgia</span><span class="tag">Datos públicos</span></div>
   </div>
 </header>
 <main class="wrap">
-  <div class="banner" id="banner" hidden></div>
   <section class="kpis reveal">
-    <div class="kpi hero-kpi"><div class="l">Llamadas al VLM evitadas</div><div class="v" id="k-save"></div><div class="d" id="k-save-d"></div></div>
+    <div class="kpi hero-kpi"><div class="l">Tipo de defecto correcto</div><div class="v" id="k-acc"></div><div class="d" id="k-acc-d"></div></div>
     <div class="kpi"><div class="l">Defectos reales localizados</div><div class="v" id="k-rec"></div><div class="d" id="k-rec-d"></div></div>
-    <div class="kpi"><div class="l">Tipo de defecto correcto</div><div class="v" id="k-acc"></div><div class="d" id="k-acc-d"></div></div>
-    <div class="kpi"><div class="l">Detector por fotograma (CPU)</div><div class="v" id="k-ms"></div><div class="d">sin GPU</div></div>
+    <div class="kpi"><div class="l">Detector por fotograma (CPU)</div><div class="v" id="k-ms"></div><div class="d" id="k-ms-d"></div></div>
+    <div class="kpi"><div class="l">Tramos con decisión</div><div class="v" id="k-sec"></div><div class="d" id="k-sec-d"></div></div>
   </section>
 
   <section class="grid">
     <div class="card reveal">
-      <h2>La cascada</h2>
-      <p class="sub">Cada etapa hace solo el trabajo que le toca. El modelo caro ve una fracción mínima de las imágenes.</p>
+      <h2>El sistema</h2>
+      <p class="sub">Tres pasos sencillos y medibles. Cada uno se puede ajustar con datos de la planta.</p>
       <div class="flow">
-        <div class="stage"><div class="n" style="color:var(--s1)">Etapa 1 · cada fotograma</div><h3>Detector YOLO11n</h3><p>Localiza posibles defectos y los asocia entre fotogramas con la posición de la banda.</p><div class="m" id="st1"></div></div>
+        <div class="stage"><div class="n" style="color:var(--s1)">Paso 1 · cada fotograma</div><h3>Detector YOLO11n</h3><p>Localiza y clasifica defectos en seis tipos. Ligero a propósito: funciona en un PC de línea sin GPU.</p><div class="m" id="st1"></div></div>
         <div class="arrow">→</div>
-        <div class="stage"><div class="n" style="color:var(--s4)">Etapa 2 · pocos recortes</div><h3>VLM local</h3><p>Gradúa la severidad, explica el defecto y puede descartar falsos positivos. Se le pregunta hasta que dos respuestas coinciden (máx. 4 por defecto). El tipo lo decide el detector.</p><div class="m" id="st2"></div></div>
+        <div class="stage"><div class="n" style="color:var(--s4)">Paso 2 · seguimiento</div><h3>Un defecto, un objeto</h3><p>Asocia las detecciones entre fotogramas con la posición de la banda (el encoder de la línea). El tipo se decide por mayoría.</p><div class="m" id="st2"></div></div>
         <div class="arrow">→</div>
-        <div class="stage"><div class="n" style="color:var(--s3)">Etapa 3 · por tramo</div><h3>Informe y decisión</h3><p>Defectos, tipos y severidad por tramo de banda: OK, revisar o rechazar.</p><div class="m" id="st3"></div></div>
+        <div class="stage"><div class="n" style="color:var(--s3)">Paso 3 · por tramo</div><h3>Informe y decisión</h3><p>Defectos y tipos por tramo de banda, con una regla de calidad explícita y configurable.</p><div class="m" id="st3"></div></div>
       </div>
     </div>
 
     <div class="card reveal">
       <h2>La banda inspeccionada</h2>
-      <p class="sub">Imágenes de validación que el detector no vio, montadas como una banda continua. NEU-DET solo contiene imágenes con defecto, así que casi todos los tramos tienen hallazgos. Recuadros: verde severidad baja · ámbar media · naranja alta. Desplaza horizontalmente.</p>
-      <div class="band" id="band"><img id="strip" alt="Banda de acero con defectos marcados"></div>
+      <p class="sub">Imágenes de validación que el detector no vio, montadas como una banda continua. NEU-DET solo contiene imágenes con defecto, así que todos los tramos tienen hallazgos. Recuadros: naranja, defecto crítico (inclusión o cascarilla) · ámbar, resto. Desplaza horizontalmente.</p>
+      <div class="band"><img id="strip" alt="Banda de acero con defectos marcados"></div>
       <div class="secs" id="secs"></div>
-      <div class="legend legend-sq" style="margin-top:10px"><span><i style="background:#1f3b2a"></i>OK</span><span><i style="background:#c98500"></i>Revisar</span><span><i style="background:#d03b3b"></i>Rechazar</span></div>
+      <div class="legend legend-sq" style="margin-top:10px"><span><i style="background:#c98500"></i>Revisar</span><span><i style="background:#d03b3b"></i>Rechazar</span></div>
     </div>
 
     <div class="card span-8 reveal">
-      <h2>Trabajo por fotograma</h2>
-      <p class="sub">Detecciones del modelo ligero frente a llamadas al VLM a lo largo de la inspección (media móvil de 10 fotogramas).</p>
-      <div class="legend"><span><i style="background:var(--s1)"></i>Detecciones YOLO</span><span><i style="background:var(--s4)"></i>Llamadas al VLM</span></div>
+      <h2>Detecciones por fotograma</h2>
+      <p class="sub">Número de detecciones a lo largo de la inspección (media móvil de 10 fotogramas).</p>
       <div id="tl"></div>
     </div>
     <div class="card span-4 reveal">
       <h2>Decisión por tramo</h2>
       <p class="sub" id="sec-sub"></p>
       <div id="dec"></div>
+      <div class="rule" id="rule"></div>
     </div>
 
     <div class="card reveal">
-      <h2>Defectos y lo que dijo el modelo</h2>
-      <p class="sub">Recortes de los defectos más persistentes: tipo final (detector), referencia, lo que respondió el VLM y su explicación.</p>
+      <h2>Defectos detectados</h2>
+      <p class="sub">Recortes de los defectos vistos en más fotogramas: tipo asignado, referencia etiquetada y fotogramas en los que aparece.</p>
       <div class="crops" id="crops"></div>
     </div>
 
-    <div class="card reveal">
-      <h2>Lo que no funcionó: el VLM decidiendo el tipo</h2>
-      <p class="sub">La primera versión dejaba que el VLM eligiera el tipo de defecto. Con un modelo de 3B en CPU, empeoró al detector.</p>
+    <div class="card reveal" id="exp-card">
+      <div class="verdict">Experimento descartado</div>
+      <h2>Un modelo de visión-lenguaje como segunda etapa</h2>
+      <p class="sub">Se probó una cascada en la que un VLM local (Qwen2.5-VL con Ollama) revisaba recortes de cada defecto para clasificarlo, graduar su severidad y explicarlo. Medido sobre los mismos defectos, empeoraba el sistema.</p>
       <div class="grid" style="margin-top:6px">
-        <div class="span-6"><div id="lesson"></div></div>
-        <div class="span-6"><p class="note" id="lesson-t" style="font-size:14px;line-height:1.6;margin:0"></p></div>
+        <div class="span-6"><div id="exp"></div></div>
+        <div class="span-6"><p class="note" id="exp-t" style="font-size:14px;line-height:1.6;margin:0"></p></div>
       </div>
     </div>
+
     <div class="card reveal">
-      <h2>Por qué en cascada</h2>
+      <h2>Con datos de la planta</h2>
       <div class="steps">
-        <div class="step"><b>Coste</b>Un VLM en cada fotograma es caro y lento. Aquí solo ve unos pocos recortes por defecto.</div>
-        <div class="step"><b>Fiabilidad</b>El consenso filtra respuestas erráticas, pero no corrige un sesgo: por eso el tipo lo decide el modelo entrenado para ello y el VLM aporta lo que el detector no sabe dar.</div>
-        <div class="step"><b>Privacidad</b>El VLM corre en local con Ollama: las imágenes de la planta no salen de la fábrica.</div>
-        <div class="step"><b>Explicable</b>Cada defecto lleva tipo, severidad y una razón en lenguaje natural para el informe de calidad.</div>
-        <div class="step"><b>Medido, no supuesto</b>Cada etapa se evalúa por separado. Si un modelo más grande o un prompt mejor clasifican mejor que el detector, la regla de fusión cambia con datos.</div>
+        <div class="step"><b>Más defectos encontrados</b>El detector de la demo localiza la mitad de los defectos etiquetados. Con imágenes propias, más resolución y más ejemplos de los tipos difíciles es lo primero que se mejora.</div>
+        <div class="step"><b>Regla de calidad real</b>La regla de esta demo es un ejemplo. En planta la fija el responsable de calidad por producto y cliente, y se valida con el histórico de rechazos.</div>
+        <div class="step"><b>Sincronización con la línea</b>Cámara lineal o de área sincronizada con el encoder, para posicionar cada defecto en metros de bobina.</div>
+        <div class="step"><b>Integración y trazabilidad</b>Informe por bobina o lote en el MES, con la imagen de cada defecto, sin enviar vídeo fuera de la planta.</div>
       </div>
     </div>
   </section>
 
   <footer class="footer">
     <div><b>Álvaro Martín Coll</b> · Físico · Ingeniero de IA para industria y energía<br>
-      <span class="note">Datos: NEU-DET, base de datos de defectos superficiales de banda laminada en caliente (Northeastern University), uso de investigación. VLM: qwen2.5vl:3b con Ollama en un portátil sin GPU (≈80 s por llamada). Proyecto demostrativo, sin datos de clientes.</span></div>
+      <span class="note">Datos: NEU-DET, base de datos de defectos superficiales de banda laminada en caliente (Northeastern University), uso de investigación. Detector y experimento con VLM ejecutados en CPU, sin GPU. Proyecto demostrativo, sin datos de clientes.</span></div>
     <div><a class="cta" href="{{MALT_URL}}">Hablemos de tu línea</a></div>
   </footer>
 </main>
@@ -122,55 +126,58 @@
 <script>
 const R = /*DATA*/;
 const $ = (id) => document.getElementById(id);
-const M = R.metrics, ES = R.labels_es;
-const SEV = { low: "baja", medium: "media", high: "alta" };
+const M = R.metrics, ES = R.labels_es, X = R.vlm_experiment;
 const pct = (v) => v == null ? "–" : Math.round(v * 100) + " %";
 const n = (v) => v.toLocaleString("es-ES");
-if (M.backend !== "ollama") { $("banner").hidden = false;
-  $("banner").innerHTML = "<b>Vista previa sin VLM.</b> Estos resultados usan el detector en las tres etapas para probar el pipeline. La versión publicada usa el VLM local."; }
-$("k-save").textContent = Math.round(M.vlm_saving_pct) + " %";
-$("k-save-d").textContent = `${n(M.vlm_calls)} llamadas en lugar de ${n(M.vlm_calls_if_every_frame)}`;
+const dec = R.sections.reduce((a, s) => (a[s.decision] = (a[s.decision] || 0) + 1, a), {});
+
+$("k-acc").textContent = pct(M.class_acc);
+$("k-acc-d").textContent = `${M.real_defects} defectos reales, seis tipos`;
 $("k-rec").textContent = pct(M.recall);
 $("k-rec-d").textContent = `${M.gt_found} de ${M.gt_defects} defectos etiquetados`;
-$("k-acc").textContent = pct(M.class_acc_cascade);
-$("k-acc-d").textContent = M.class_acc_vlm_type != null ? `si lo decidía el VLM: ${pct(M.class_acc_vlm_type)}` : `solo detector: ${pct(M.class_acc_detector)}`;
 $("k-ms").textContent = Math.round(M.ms_det_per_frame) + " ms";
+$("k-ms-d").textContent = `≈ ${Math.round(M.frames_per_s)} fotogramas por segundo con 2 núcleos de CPU, sin GPU`;
+$("k-sec").textContent = R.sections.length;
+$("k-sec-d").textContent = `${dec.OK || 0} OK · ${dec.REVISAR || 0} revisar · ${dec.RECHAZAR || 0} rechazar`;
 $("st1").innerHTML = `${n(M.frames)} <small>fotogramas analizados</small>`;
-$("st2").innerHTML = `${n(M.vlm_calls)} <small>llamadas · ${pct(M.consensus_rate)} con consenso${M.fp_suppressed_by_vlm ? " · " + M.fp_suppressed_by_vlm + " falsos positivos descartados" : ""}</small>`;
-const dec = R.sections.reduce((a, s) => (a[s.decision] = (a[s.decision] || 0) + 1, a), {});
-$("st3").innerHTML = `${R.sections.length} <small>tramos · ${dec.OK || 0} OK · ${dec.REVISAR || 0} revisar · ${dec.RECHAZAR || 0} rechazar</small>`;
+$("st2").innerHTML = `${M.defects} <small>defectos únicos · ${Math.round(100 * M.precision)} % corresponden a uno real</small>`;
+$("st3").innerHTML = `${R.sections.length} <small>tramos · ${dec.REVISAR || 0} revisar · ${dec.RECHAZAR || 0} rechazar</small>`;
 
 $("strip").src = "img/strip_overview_h.jpg";
-$("secs").innerHTML = R.sections.map((s) => `<div class="d-${s.decision}" title="Tramo ${s.section}: ${s.defects} defectos">${s.section}</div>`).join("");
+$("secs").innerHTML = R.sections.map((s) => `<div class="d-${s.decision}" title="Tramo ${s.section}: ${s.defects} defectos · ${Object.entries(s.types).map(([k, v]) => v + " " + (ES[k] || k).toLowerCase()).join(", ")}">${s.section}</div>`).join("");
 $("sec-sub").textContent = `${R.sections.length} tramos de banda inspeccionados.`;
+const ru = R.rule;
+$("rule").innerHTML = `<b>Regla de ejemplo</b> (configurable): <b>rechazar</b> si un defecto ocupa más del ${Math.round(ru.reject_area * 100)} % de una imagen o hay ${ru.reject_critical} o más defectos críticos (${ru.critical_types.map((t) => (ES[t] || t).toLowerCase()).join(" o ")}); <b>revisar</b> si hay al menos ${ru.review_count}; <b>OK</b> si no hay ninguno.`;
 
 function smooth(a, w) { return a.map((_, i) => { const s = a.slice(Math.max(0, i - w + 1), i + 1); return s.reduce((x, y) => x + y, 0) / s.length; }); }
 function draw() {
   const tl = R.timeline;
   Viz.line($("tl"), { x: tl.map((t) => t[0]), height: 280, xLabel: "Fotograma", yMin: 0, xTip: (v) => "Fotograma " + v,
     yTip: (v) => v.toLocaleString("es-ES", { maximumFractionDigits: 2 }),
-    series: [{ name: "Detecciones YOLO", values: smooth(tl.map((t) => t[1]), 10), color: "#3987e5", fill: true },
-             { name: "Llamadas al VLM", values: smooth(tl.map((t) => t[2]), 10), color: "#9085e9" }] });
+    series: [{ name: "Detecciones", values: smooth(tl.map((t) => t[1]), 10), color: "#3987e5", fill: true }] });
   Viz.bars($("dec"), { fmt: (v) => v, items: [
     { label: "OK", value: dec.OK || 0, color: "#199e70" },
     { label: "Revisar", value: dec.REVISAR || 0, color: "#c98500" },
     { label: "Rechazar", value: dec.RECHAZAR || 0, color: "#d03b3b" }] });
+  if (X) Viz.bars($("exp"), { fmt: pct, items: [
+    { label: "Detector YOLO11n", value: X.detector, color: "#3987e5" },
+    { label: "VLM de 3B (con consenso)", value: X.vlm_3b, color: "#9085e9" },
+    { label: "VLM de 7B", value: X.vlm_7b, color: "#b3a9f2" }] });
 }
 draw();
 addEventListener("resize", () => { clearTimeout(window._rt); window._rt = setTimeout(draw, 150); });
-$("crops").innerHTML = R.examples.map((e) => `<div class="crop"><img src="img/${e.img}" alt="${ES[e.final] || e.final}" loading="lazy">
-  <div><b>${ES[e.final] || e.final}</b>Referencia: ${e.gt ? ES[e.gt] : "—"}<br>${e.vlm_calls} llamadas · visto en ${e.frames} fotogramas
-  ${e.vlm_label ? `<br>VLM: ${ES[e.vlm_label] || e.vlm_label} · severidad ${SEV[e.severity] || e.severity}` : ""}
-  ${e.reason && M.backend === "ollama" ? `<div class="r">«${e.reason}»</div>` : ""}</div></div>`).join("");
-if (M.class_acc_vlm_type != null) {
-  const VA = M.vlm_type_answers || {}, tot = Object.values(VA).reduce((a, b) => a + b, 0), top = Object.entries(VA).sort((a, b) => b[1] - a[1])[0];
-  Viz.bars($("lesson"), { fmt: pct, items: [
-    { label: "Detector YOLO11n decide el tipo", value: M.class_acc_detector, color: "#3987e5" },
-    { label: "VLM de 3B decide el tipo", value: M.class_acc_vlm_type, color: "#9085e9" }] });
-  $("lesson-t").innerHTML = `El VLM respondió <b>«${ES[top[0]] || top[0]}»</b> en ${top[1]} de ${tot} defectos: un sesgo consistente que el consenso no puede filtrar, porque dos respuestas iguales y erróneas también son consenso. `
-    + `Diseño final: <b>el detector decide el tipo</b> (${pct(M.class_acc_cascade)} de acierto) y el VLM gradúa la severidad, explica el defecto y puede vetar un falso positivo. `
-    + `Las respuestas del VLM son las de la misma ejecución; solo cambia la regla de fusión (<code>src/fuse.py</code>).`;
-} else { $("lesson").closest(".card").hidden = true; }
+
+$("crops").innerHTML = R.examples.map((e) => `<div class="crop"><img src="img/${e.img}" alt="Defecto ${ES[e.label] || e.label}" loading="lazy">
+  <div><b>${ES[e.label] || e.label}</b>Referencia: ${e.gt ? `<span class="${e.gt === e.label ? "ok" : "ko"}">${ES[e.gt]}</span>` : "—"}<br>Visto en ${e.frames} fotogramas</div></div>`).join("");
+
+if (X) {
+  const top3 = Object.entries(X.vlm_3b_answers).sort((a, b) => b[1] - a[1])[0], t3 = Object.values(X.vlm_3b_answers).reduce((a, b) => a + b, 0);
+  const top7 = Object.entries(X.vlm_7b_answers).sort((a, b) => b[1] - a[1])[0], t7 = Object.values(X.vlm_7b_answers).reduce((a, b) => a + b, 0);
+  $("exp-t").innerHTML = `Tipo de defecto correcto en los mismos <b>${X.defects_compared}</b> defectos. El modelo de 3B respondió «${ES[top3[0]] || top3[0]}» en ${top3[1]} de ${t3}; el de 7B, en ${top7[1]} de ${t7}. `
+    + `Es un sesgo que el consenso no corrige, porque dos respuestas iguales y erróneas también son consenso, y un modelo más grande tampoco lo arregló. `
+    + `Además, cada llamada tardaba entre ${Math.round(X.vlm_3b_s_per_call)} y ${Math.round(X.vlm_7b_s_per_call)} s en CPU, y sus explicaciones contradecían a veces el tipo. <b>Conclusión: fuera del sistema.</b> `
+    + `El experimento completo, con sus resultados y registros, está en <code>experiments/vlm/</code>.`;
+} else { $("exp-card").hidden = true; }
 
 const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .1 });
 document.querySelectorAll(".reveal").forEach((e) => io.observe(e));
@@ -188,10 +195,10 @@ document.querySelectorAll(".reveal").forEach((e) => io.observe(e));
     spots.forEach((s) => {
       const px = ((s.x - t) % 1 + 1) % 1 * w, py = s.y * h;
       const near = Math.abs(px - sx) < 40 * devicePixelRatio;
-      x.strokeStyle = near ? "rgba(144,133,233,.9)" : "rgba(144,133,233,.18)"; x.lineWidth = devicePixelRatio;
+      x.strokeStyle = near ? "rgba(57,135,229,.9)" : "rgba(57,135,229,.18)"; x.lineWidth = devicePixelRatio;
       x.strokeRect(px - s.r * devicePixelRatio, py - s.r * devicePixelRatio, 2 * s.r * devicePixelRatio, 2 * s.r * devicePixelRatio);
     });
-    x.fillStyle = "rgba(144,133,233,.35)"; x.fillRect(sx, 0, 2 * devicePixelRatio, h);
+    x.fillStyle = "rgba(57,135,229,.35)"; x.fillRect(sx, 0, 2 * devicePixelRatio, h);
     t += 0.0008; if (!reduce) requestAnimationFrame(d);
   })();
 })();

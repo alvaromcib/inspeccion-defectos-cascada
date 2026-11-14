@@ -1,0 +1,74 @@
+Modelo VLM: qwen2.5vl:7b
+[1/55] defect 42 · unknown (ref: rolled-in_scale) (158 s)
+[2/55] defect 25 · patches (ref: rolled-in_scale) (139 s)
+[3/55] defect 56 · patches (ref: patches) (146 s)
+[4/55] defect 46 · crazing (ref: scratches) (144 s)
+[5/55] defect 9 · patches (ref: inclusion) (145 s)
+[6/55] defect 36 · patches (ref: patches) (139 s)
+[7/55] defect 10 · patches (ref: patches) (142 s)
+[8/55] defect 14 · patches (ref: rolled-in_scale) (143 s)
+[9/55] defect 19 · patches (ref: inclusion) (135 s)
+[10/55] defect 28 · pitted_surface (ref: patches) (137 s)
+[11/55] defect 31 · patches (ref: patches) (141 s)
+[12/55] defect 50 · pitted_surface (ref: rolled-in_scale) (132 s)
+[13/55] defect 51 · unknown (ref: inclusion) (140 s)
+[14/55] defect 57 · patches (ref: patches) (134 s)
+[15/55] defect 59 · patches (ref: patches) (124 s)
+[16/55] defect 38 · patches (ref: patches) (124 s)
+[17/55] defect 16 · patches (ref: inclusion) (120 s)
+[18/55] defect 4 · pitted_surface (ref: patches) (120 s)
+[19/55] defect 12 · patches (ref: inclusion) (120 s)
+[20/55] defect 35 · patches (ref: patches) (120 s)
+[21/55] defect 15 · patches (ref: inclusion) (122 s)
+[22/55] defect 40 · patches (ref: patches) (119 s)
+[23/55] defect 3 · patches (ref: inclusion) (120 s)
+[24/55] defect 49 · pitted_surface (ref: rolled-in_scale) (119 s)
+[25/55] defect 61 · patches (ref: patches) (123 s)
+[26/55] defect 62 · patches (ref: inclusion) (121 s)
+[27/55] defect 63 · patches (ref: patches) (121 s)
+[28/55] defect 55 · patches (ref: scratches) (124 s)
+[29/55] defect 20 · unknown (ref: -) (91 s)
+[30/55] defect 47 · unknown (ref: crazing) (97 s)
+[31/55] defect 30 · patches (ref: patches) (113 s)
+[32/55] defect 2 · patches (ref: patches) (108 s)
+[33/55] defect 48 · patches (ref: rolled-in_scale) (94 s)
+[34/55] defect 32 · unknown (ref: crazing) (94 s)
+[35/55] defect 5 · patches (ref: patches) (96 s)
+[36/55] defect 0 · patches (ref: patches) (96 s)
+[37/55] defect 8 · unknown (ref: crazing) (101 s)
+[38/55] defect 41 · patches (ref: patches) (96 s)
+[39/55] defect 68 · unknown (ref: scratches) (99 s)
+[40/55] defect 7 · unknown (ref: -) (113 s)
+[41/55] defect 22 · patches (ref: -) (108 s)
+[42/55] defect 69 · crazing (ref: scratches) (102 s)
+[43/55] defect 6 · patches (ref: rolled-in_scale) (101 s)
+[44/55] defect 39 · unknown (ref: -) (105 s)
+[45/55] defect 70 · patches (ref: scratches) (99 s)
+[46/55] defect 64 · patches (ref: -) (93 s)
+[47/55] defect 34 · patches (ref: patches) (111 s)
+[48/55] defect 37 · patches (ref: patches) (123 s)
+[49/55] defect 29 · unknown (ref: -) (110 s)
+[50/55] defect 53 · patches (ref: rolled-in_scale) (110 s)
+[51/55] defect 27 · patches (ref: -) (114 s)
+[52/55] defect 1 · unknown (ref: patches) (110 s)
+[53/55] defect 43 · pitted_surface (ref: patches) (114 s)
+[54/55] defect 54 · unknown (ref: patches) (117 s)
+[55/55] defect 71 · unknown (ref: -) (113 s)
+{
+ "model": "qwen2.5vl:7b",
+ "defects": 55,
+ "real_defects": 47,
+ "acc_detector": 0.957,
+ "acc_new_vlm": 0.383,
+ "acc_run_vlm_same_defects": 0.465,
+ "acc_new_vlm_same_defects": 0.419,
+ "acc_detector_same_defects": 0.953,
+ "new_vlm_answers": {
+  "unknown": 13,
+  "patches": 35,
+  "crazing": 2,
+  "pitted_surface": 5
+ },
+ "s_per_call": 118.2,
+ "minutes_total": 108.4
+}

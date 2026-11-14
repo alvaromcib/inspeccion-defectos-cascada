@@ -1,0 +1,572 @@
+{
+ "summary": {
+  "model": "qwen2.5vl:7b",
+  "defects": 55,
+  "real_defects": 47,
+  "acc_detector": 0.957,
+  "acc_new_vlm": 0.383,
+  "acc_run_vlm_same_defects": 0.465,
+  "acc_new_vlm_same_defects": 0.419,
+  "acc_detector_same_defects": 0.953,
+  "new_vlm_answers": {
+   "unknown": 13,
+   "patches": 35,
+   "crazing": 2,
+   "pitted_surface": 5
+  },
+  "s_per_call": 118.2,
+  "minutes_total": 108.4
+ },
+ "rows": [
+  {
+   "id": 42,
+   "gt": "rolled-in_scale",
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 158.4
+  },
+  {
+   "id": 25,
+   "gt": "rolled-in_scale",
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 139.1
+  },
+  {
+   "id": 56,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 146.3
+  },
+  {
+   "id": 46,
+   "gt": "scratches",
+   "det_label": "scratches",
+   "run_vlm_label": "scratches",
+   "new_label": "crazing",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 143.6
+  },
+  {
+   "id": 9,
+   "gt": "inclusion",
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 144.9
+  },
+  {
+   "id": 36,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "crazing",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 138.8
+  },
+  {
+   "id": 10,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 142.0
+  },
+  {
+   "id": 14,
+   "gt": "rolled-in_scale",
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 143.3
+  },
+  {
+   "id": 19,
+   "gt": "inclusion",
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 135.2
+  },
+  {
+   "id": 28,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "pitted_surface",
+   "severity": "high",
+   "reason": "Superficie con picaduras y manchas irregulares",
+   "s": 137.2
+  },
+  {
+   "id": 31,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 140.8
+  },
+  {
+   "id": 50,
+   "gt": "rolled-in_scale",
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "pitted_surface",
+   "severity": "low",
+   "reason": "Pequeñas manchas irregulares en la superficie.",
+   "s": 132.0
+  },
+  {
+   "id": 51,
+   "gt": "inclusion",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 139.7
+  },
+  {
+   "id": 57,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares y manchas en la superficie del acero.",
+   "s": 133.6
+  },
+  {
+   "id": 59,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 124.5
+  },
+  {
+   "id": 38,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares y manchas en la superficie del acero.",
+   "s": 123.5
+  },
+  {
+   "id": 16,
+   "gt": "inclusion",
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 120.1
+  },
+  {
+   "id": 4,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "pitted_surface",
+   "severity": "high",
+   "reason": "Superficie con picaduras y manchas irregulares",
+   "s": 120.2
+  },
+  {
+   "id": 12,
+   "gt": "inclusion",
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 120.0
+  },
+  {
+   "id": 35,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 120.1
+  },
+  {
+   "id": 15,
+   "gt": "inclusion",
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 121.6
+  },
+  {
+   "id": 40,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 119.4
+  },
+  {
+   "id": 3,
+   "gt": "inclusion",
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 120.2
+  },
+  {
+   "id": 49,
+   "gt": "rolled-in_scale",
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "pitted_surface",
+   "severity": "high",
+   "reason": "Superficie con picaduras visibles",
+   "s": 119.2
+  },
+  {
+   "id": 61,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 122.5
+  },
+  {
+   "id": 62,
+   "gt": "inclusion",
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 120.6
+  },
+  {
+   "id": 63,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 121.5
+  },
+  {
+   "id": 55,
+   "gt": "scratches",
+   "det_label": "scratches",
+   "run_vlm_label": "inclusion",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 123.5
+  },
+  {
+   "id": 20,
+   "gt": null,
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 91.4
+  },
+  {
+   "id": 47,
+   "gt": "crazing",
+   "det_label": "patches",
+   "run_vlm_label": "inclusion",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 97.1
+  },
+  {
+   "id": 30,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 113.2
+  },
+  {
+   "id": 2,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 107.8
+  },
+  {
+   "id": 48,
+   "gt": "rolled-in_scale",
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 94.1
+  },
+  {
+   "id": 32,
+   "gt": "crazing",
+   "det_label": "crazing",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 94.1
+  },
+  {
+   "id": 5,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 96.2
+  },
+  {
+   "id": 0,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares y manchas en la superficie del acero.",
+   "s": 96.3
+  },
+  {
+   "id": 8,
+   "gt": "crazing",
+   "det_label": "crazing",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 100.9
+  },
+  {
+   "id": 41,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares y manchas en la superficie del acero",
+   "s": 96.1
+  },
+  {
+   "id": 68,
+   "gt": "scratches",
+   "det_label": "scratches",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 99.3
+  },
+  {
+   "id": 7,
+   "gt": null,
+   "det_label": "crazing",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "low",
+   "reason": "Pequeñas grietas dispersas en la superficie.",
+   "s": 113.2
+  },
+  {
+   "id": 22,
+   "gt": null,
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 107.8
+  },
+  {
+   "id": 69,
+   "gt": "scratches",
+   "det_label": "scratches",
+   "run_vlm_label": null,
+   "new_label": "crazing",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 102.0
+  },
+  {
+   "id": 6,
+   "gt": "rolled-in_scale",
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 100.7
+  },
+  {
+   "id": 39,
+   "gt": null,
+   "det_label": "crazing",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 104.9
+  },
+  {
+   "id": 70,
+   "gt": "scratches",
+   "det_label": "scratches",
+   "run_vlm_label": null,
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 98.8
+  },
+  {
+   "id": 64,
+   "gt": null,
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 93.5
+  },
+  {
+   "id": 34,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "medium",
+   "reason": "Zonas irregulares en la superficie del acero",
+   "s": 111.2
+  },
+  {
+   "id": 37,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "inclusion",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 123.5
+  },
+  {
+   "id": 29,
+   "gt": null,
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 110.4
+  },
+  {
+   "id": 53,
+   "gt": "rolled-in_scale",
+   "det_label": "rolled-in_scale",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 110.1
+  },
+  {
+   "id": 27,
+   "gt": null,
+   "det_label": "inclusion",
+   "run_vlm_label": "patches",
+   "new_label": "patches",
+   "severity": "low",
+   "reason": "Zonas irregulares en la superficie del acero.",
+   "s": 113.6
+  },
+  {
+   "id": 1,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": null,
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 110.1
+  },
+  {
+   "id": 43,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": null,
+   "new_label": "pitted_surface",
+   "severity": "high",
+   "reason": "Superficie con picaduras visibles",
+   "s": 114.4
+  },
+  {
+   "id": 54,
+   "gt": "patches",
+   "det_label": "patches",
+   "run_vlm_label": "patches",
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 117.0
+  },
+  {
+   "id": 71,
+   "gt": null,
+   "det_label": "patches",
+   "run_vlm_label": null,
+   "new_label": "unknown",
+   "severity": "high",
+   "reason": "Grietas en red en la superficie del acero",
+   "s": 112.8
+  }
+ ]
+}

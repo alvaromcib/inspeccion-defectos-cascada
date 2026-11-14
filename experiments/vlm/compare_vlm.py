@@ -6,27 +6,30 @@ as pipeline.py) and asks the model once. Then it compares type accuracy on the r
 One call per defect, so it costs far less than a full pipeline run.
 
 Usage (Windows):  set OLLAMA_VLM=qwen2.5vl:7b
-                  python src/compare_vlm.py --rows 12
-Output: results/vlm_compare_<model>.json and a summary on screen.
+                  python experiments/vlm/compare_vlm.py --rows 12
+Output: experiments/vlm/results/compare_<size>.json and a summary on screen.
 """
 import argparse
 import json
 import os
+import sys
 import time
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
-import vlm
-from strip import build_strip
-
-ROOT = Path(__file__).resolve().parents[1]
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(HERE))
+import vlm  # noqa: E402
+from strip import build_strip  # noqa: E402
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", default=str(ROOT / "results" / "cascade_ollama.json"))
+    ap.add_argument("--run", default=str(HERE / "results" / "run_3b_cascade.json"))
     ap.add_argument("--data", default=str(ROOT / "datasets" / "neu"))
     ap.add_argument("--rows", type=int, default=12, help="must match the run being compared")
     ap.add_argument("--backend", default="ollama", choices=["ollama", "detector"])
@@ -69,7 +72,7 @@ def main():
         "s_per_call": round(float(np.mean([r["s"] for r in rows])), 1),
         "minutes_total": round((time.time() - t0) / 60, 1),
     }
-    out = ROOT / "results" / f"vlm_compare_{model.replace(':', '_')}.json"
+    out = HERE / "results" / f"compare_{model.split(':')[-1]}.json"
     out.write_text(json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=1))
     print("->", out)

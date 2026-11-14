@@ -1,0 +1,26 @@
+{
+ "defects_compared": 43,
+ "note": "Same defects of one strip run (12 sections, NEU-DET validation images). Type accuracy on defects matched to a label and asked to the VLM in the 3B run.",
+ "detector": 0.953,
+ "vlm_3b": 0.465,
+ "vlm_7b": 0.419,
+ "vlm_3b_protocol": "cascade: 2-4 calls per defect until two answers agree",
+ "vlm_7b_protocol": "one call per defect",
+ "vlm_3b_answers": {
+  "patches": 45,
+  "scratches": 1,
+  "crazing": 1,
+  "inclusion": 3
+ },
+ "vlm_7b_answers": {
+  "unknown": 13,
+  "patches": 35,
+  "crazing": 2,
+  "pitted_surface": 5
+ },
+ "vlm_3b_calls": 114,
+ "vlm_3b_s_per_call": 77.2,
+ "vlm_7b_calls": 55,
+ "vlm_7b_s_per_call": 118.2,
+ "hardware": "laptop CPU, no GPU (Ollama)"
+}
